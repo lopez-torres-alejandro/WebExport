@@ -1,0 +1,17 @@
+{
+  "name": "excel-importer",
+  "version": "1.0.0",
+  "description": "Carga de Excel a SQL Server con sincronizacion (upsert) por nombre de columnas",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "mssql": "^10.0.4",
+    "multer": "^2.2.0",
+    "xlsx": "^0.18.5"
+  }
+}

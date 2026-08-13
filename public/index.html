@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Herramienta SQL Server</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;margin:0;padding:0;color:#1f2937}
+  .topbar{background:#1e293b;color:#fff;padding:14px 28px;font-size:16px;font-weight:600;letter-spacing:.3px}
+  .container{max-width:860px;margin:0 auto;padding:28px 20px}
+  .card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:28px;margin-bottom:24px}
+  .card h2{font-size:18px;margin:0 0 20px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px}
+  label{display:block;font-weight:600;margin:14px 0 6px;font-size:13px;color:#374151;text-transform:uppercase;letter-spacing:.4px}
+  select{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;background:#fff;transition:border-color .2s}
+  select:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+  .row{display:flex;gap:14px}
+  .row>div{flex:1}
+  .btn{margin-top:18px;background:#2563eb;color:#fff;border:0;padding:12px 22px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s,transform .1s}
+  .btn:hover{background:#1d4ed8}
+  .btn:active{transform:scale(.98)}
+  .btn:disabled{background:#93c5fd;cursor:not-allowed}
+  .btn-green{background:#059669}
+  .btn-green:hover{background:#047857}
+  .btn-green:disabled{background:#6ee7b7}
+
+  .dropzone{border:2px dashed #cbd5e1;border-radius:12px;padding:40px 20px;text-align:center;transition:all .2s;cursor:pointer;margin-top:14px;background:#fafbfc}
+  .dropzone:hover,.dropzone.dragover{border-color:#2563eb;background:#eff6ff}
+  .dropzone-icon{font-size:42px;margin-bottom:10px;opacity:.5}
+  .dropzone p{margin:4px 0;font-size:14px;color:#64748b}
+  .dropzone .main-text{font-size:15px;font-weight:600;color:#334155}
+  .dropzone input[type=file]{display:none}
+
+  .file-info{display:none;margin-top:12px;padding:10px 14px;background:#f1f5f9;border-radius:8px;font-size:13px;color:#475569;align-items:center;gap:10px}
+  .file-info .name{font-weight:600;color:#1e293b}
+  .file-info .remove{margin-left:auto;cursor:pointer;color:#ef4444;font-weight:700;font-size:16px}
+
+  .progress-wrap{display:none;margin-top:20px}
+  .progress-bar{height:28px;background:#e2e8f0;border-radius:14px;overflow:hidden;position:relative}
+  .progress-fill{height:100%;background:linear-gradient(90deg,#2563eb,#3b82f6);border-radius:14px;transition:width .3s ease;width:0%;display:flex;align-items:center;justify-content:flex-end;padding-right:10px}
+  .progress-fill.done{background:linear-gradient(90deg,#059669,#10b981)}
+  .progress-fill.error{background:linear-gradient(90deg,#dc2626,#ef4444)}
+  .progress-pct{font-size:12px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.3)}
+  .progress-msg{margin-top:8px;font-size:13px;color:#64748b;text-align:center}
+
+  .result{display:none;margin-top:20px;padding:18px;border-radius:10px;font-size:14px;line-height:1.7}
+  .result.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+  .result.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .result h3{margin:0 0 10px;font-size:16px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
+  .stat{background:#fff;border-radius:8px;padding:12px;text-align:center;border:1px solid #e2e8f0}
+  .stat .num{font-size:24px;font-weight:700;color:#1e293b}
+  .stat .lbl{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .stat.green .num{color:#059669}
+  .stat.blue .num{color:#2563eb}
+  .stat.red .num{color:#dc2626}
+  .stat.gray .num{color:#9ca3af}
+
+  .preview-wrap{overflow:auto;max-height:320px;margin-top:12px}
+  table.data{border-collapse:collapse;font-size:13px;width:100%}
+  table.data th,table.data td{border:1px solid #e2e8f0;padding:7px 10px;text-align:left;white-space:nowrap}
+  table.data th{background:#f8fafc;font-weight:600;position:sticky;top:0}
+  .small{font-size:12px;color:#64748b}
+
+  .spinner{display:inline-block;width:18px;height:18px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="topbar">Herramienta SQL Server — Carga y Exportacion de Datos</div>
+
+<div class="container">
+
+  <!-- CARGAR DATOS -->
+  <div class="card" id="cardCargar">
+    <h2>Cargar datos a SQL Server</h2>
+
+    <div class="row">
+      <div>
+        <label for="tablaCargar">Tabla destino</label>
+        <select id="tablaCargar"><option value="">Cargando tablas...</option></select>
+      </div>
+      <div>
+        <label for="claveCargar">Columna clave (identifica cada fila)</label>
+        <select id="claveCargar" disabled><option value="">Primero elige la tabla</option></select>
+      </div>
+    </div>
+
+    <label>Archivo</label>
+    <div class="dropzone" id="dropZone">
+      <div class="dropzone-icon">&#128206;</div>
+      <p class="main-text">Arrastra un archivo aqui</p>
+      <p>Excel (.xlsx, .xls), CSV o ZIP</p>
+      <p>o haz clic para seleccionar</p>
+      <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.zip">
+    </div>
+    <div class="file-info" id="fileInfo">
+      <span>&#128196;</span>
+      <span class="name" id="fileName"></span>
+      <span class="small" id="fileSize"></span>
+      <span class="remove" id="fileRemove" title="Quitar archivo">&times;</span>
+    </div>
+
+    <button class="btn" id="btnCargar" disabled>Cargar datos</button>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"><span class="progress-pct" id="progressPct">0%</span></div>
+      </div>
+      <div class="progress-msg" id="progressMsg">Preparando...</div>
+    </div>
+
+    <div class="result" id="resultCargar"></div>
+  </div>
+
+  <!-- EXPORTAR -->
+  <div class="card" id="cardExportar">
+    <h2>Exportar tabla a Excel</h2>
+
+    <label for="tablaExp">Tabla a exportar</label>
+    <select id="tablaExp"><option value="">Cargando tablas...</option></select>
+
+    <div style="display:flex;gap:12px;margin-top:18px">
+      <button class="btn btn-green" id="btnVista">Vista previa (10 filas)</button>
+      <button class="btn" id="btnExp">Exportar tabla completa</button>
+    </div>
+    <div id="resultadoExp"></div>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Error del servidor');
+  return j;
+}
+
+let selectedFile = null;
+
+/* ── Tablas ────────────────────────────────────────────── */
+async function cargarTablas() {
+  try {
+    const j = await api('/api/tablas');
+    const opts = '<option value="">-- elegir tabla --</option>' + j.tablas.map((t) => `<option value="${t}">${t}</option>`).join('');
+    $('tablaCargar').innerHTML = opts;
+    $('tablaExp').innerHTML = opts;
+  } catch (e) {
+    $('tablaCargar').innerHTML = `<option value="">${e.message}</option>`;
+    $('tablaExp').innerHTML = `<option value="">${e.message}</option>`;
+  }
+}
+
+async function cargarColumnas() {
+  const t = $('tablaCargar').value;
+  const sel = $('claveCargar');
+  sel.disabled = !t;
+  if (!t) { sel.innerHTML = '<option value="">Primero elige la tabla</option>'; return; }
+  sel.innerHTML = '<option value="">Cargando...</option>';
+  try {
+    const j = await api('/api/columnas?tabla=' + encodeURIComponent(t));
+    sel.innerHTML = '<option value="">-- elegir columna --</option>' +
+      j.columnas.map((c) => `<option value="${c.nombre}">${c.nombre} (${c.tipo})</option>`).join('');
+  } catch (e) {
+    sel.innerHTML = `<option value="">${e.message}</option>`;
+  }
+}
+
+$('tablaCargar').addEventListener('change', cargarColumnas);
+
+/* ── Drag & Drop ───────────────────────────────────────── */
+const dropZone = $('dropZone');
+const fileInput = $('archivo');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  const ext = f.name.split('.').pop().toLowerCase();
+  if (!['xlsx','xls','csv','zip'].includes(ext)) {
+    alert('Formato no soportado. Usa .xlsx, .xls, .csv o .zip');
+    return;
+  }
+  selectedFile = f;
+  $('fileName').textContent = f.name;
+  $('fileSize').textContent = `(${(f.size / 1024 / 1024).toFixed(2)} MB)`;
+  $('fileInfo').style.display = 'flex';
+  dropZone.style.display = 'none';
+  $('btnCargar').disabled = false;
+  $('resultCargar').style.display = 'none';
+}
+
+$('fileRemove').addEventListener('click', () => {
+  selectedFile = null;
+  fileInput.value = '';
+  $('fileInfo').style.display = 'none';
+  dropZone.style.display = '';
+  $('btnCargar').disabled = true;
+  $('resultCargar').style.display = 'none';
+});
+
+/* ── Cargar datos ──────────────────────────────────────── */
+$('btnCargar').addEventListener('click', async () => {
+  const box = $('resultCargar');
+  const tabla = $('tablaCargar').value;
+  const clave = $('claveCargar').value;
+  box.style.display = 'none';
+
+  if (!selectedFile) { alert('Selecciona un archivo.'); return; }
+  if (!tabla) { alert('Selecciona una tabla destino.'); return; }
+  if (!clave) { alert('Selecciona una columna clave.'); return; }
+
+  $('btnCargar').disabled = true;
+  $('btnCargar').innerHTML = '<span class="spinner"></span>Cargando...';
+  $('progressWrap').style.display = 'block';
+  $('progressFill').style.width = '0%';
+  $('progressFill').className = 'progress-fill';
+  $('progressPct').textContent = '0%';
+  $('progressMsg').textContent = 'Subiendo archivo...';
+
+  const fd = new FormData();
+  fd.append('archivo', selectedFile);
+  fd.append('tabla', tabla);
+  fd.append('clave', clave);
+
+  try {
+    const resp = await fetch('/api/cargar', { method: 'POST', body: fd });
+    if (!resp.ok) throw new Error('Error al conectar con el servidor.');
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        let eventType = 'message', data = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) eventType = line.slice(7);
+          if (line.startsWith('data: ')) data = line.slice(6);
+        }
+        if (!data) continue;
+        const parsed = JSON.parse(data);
+
+        if (eventType === 'progress') {
+          $('progressFill').style.width = parsed.pct + '%';
+          $('progressPct').textContent = parsed.pct + '%';
+          $('progressMsg').textContent = parsed.msg;
+        } else if (eventType === 'done') {
+          $('progressFill').style.width = '100%';
+          $('progressFill').className = 'progress-fill done';
+          $('progressPct').textContent = '100%';
+          $('progressMsg').textContent = 'Carga completa.';
+          showResult(parsed);
+        } else if (eventType === 'error') {
+          $('progressFill').className = 'progress-fill error';
+          $('progressMsg').textContent = 'Error.';
+          box.className = 'result err';
+          box.innerHTML = `<h3>Error</h3><p>${esc(parsed.message)}</p>`;
+          box.style.display = 'block';
+        }
+      }
+    }
+  } catch (e) {
+    $('progressFill').className = 'progress-fill error';
+    $('progressMsg').textContent = 'Error de conexion.';
+    box.className = 'result err';
+    box.innerHTML = `<h3>Error</h3><p>${esc(e.message)}</p>`;
+    box.style.display = 'block';
+  } finally {
+    $('btnCargar').disabled = false;
+    $('btnCargar').innerHTML = 'Cargar datos';
+  }
+});
+
+function showResult(d) {
+  const box = $('resultCargar');
+  box.className = 'result ok';
+  box.innerHTML = `
+    <h3>Carga completa</h3>
+    <div class="small">Archivo: <b>${esc(d.archivo)}</b> | Tabla: <b>${esc(d.tabla)}</b> | Clave: <b>${esc(d.clave)}</b></div>
+    <div class="stats">
+      <div class="stat blue"><div class="num">${d.totalFilas.toLocaleString()}</div><div class="lbl">Filas en archivo</div></div>
+      <div class="stat green"><div class="num">${d.insertados.toLocaleString()}</div><div class="lbl">Nuevas (INSERT)</div></div>
+      <div class="stat green"><div class="num">${d.actualizados.toLocaleString()}</div><div class="lbl">Actualizadas (UPDATE)</div></div>
+      <div class="stat red"><div class="num">${d.errores.toLocaleString()}</div><div class="lbl">Errores</div></div>
+      <div class="stat gray"><div class="num">${d.duplicadas.toLocaleString()}</div><div class="lbl">Duplicadas en archivo</div></div>
+      <div class="stat gray"><div class="num">${d.omitidas.toLocaleString()}</div><div class="lbl">Sin clave</div></div>
+    </div>`;
+  box.style.display = 'block';
+}
+
+/* ── Exportar ──────────────────────────────────────────── */
+$('btnVista').addEventListener('click', async () => {
+  const box = $('resultadoExp');
+  const t = $('tablaExp').value;
+  box.innerHTML = '';
+  if (!t) { box.innerHTML = '<div class="result err" style="display:block">Elige la tabla primero.</div>'; return; }
+  $('btnVista').disabled = true;
+  try {
+    const j = await api('/api/vista?tabla=' + encodeURIComponent(t));
+    let html = `<div class="result ok" style="display:block"><b>${j.total.toLocaleString()}</b> filas en total. Primeras ${j.filas.length}:</div>`;
+    html += '<div class="preview-wrap"><table class="data"><tr>' +
+      j.columnas.map((c) => `<th>${esc(c)}</th>`).join('') + '</tr>';
+    for (const f of j.filas) {
+      html += '<tr>' + j.columnas.map((c) => {
+        let v = f[c];
+        if (v === null || v === undefined) v = '';
+        else if (v instanceof Date) v = v.toISOString().slice(0, 10);
+        else v = String(v);
+        if (v.length > 25) v = v.slice(0, 25) + '...';
+        return `<td>${esc(v)}</td>`;
+      }).join('') + '</tr>';
+    }
+    html += '</table></div>';
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = `<div class="result err" style="display:block">${esc(e.message)}</div>`;
+  } finally {
+    $('btnVista').disabled = false;
+  }
+});
+
+$('btnExp').addEventListener('click', async () => {
+  const box = $('resultadoExp');
+  const t = $('tablaExp').value;
+  box.innerHTML = '';
+  if (!t) { box.innerHTML = '<div class="result err" style="display:block">Elige la tabla a exportar.</div>'; return; }
+  $('btnExp').disabled = true;
+  try {
+    const j = await api('/api/vista?tabla=' + encodeURIComponent(t));
+    if (j.total > 50000) {
+      if (!confirm(`Esta tabla tiene ${j.total.toLocaleString()} filas. Puede tardar 1-3 minutos. Continuar?`)) {
+        box.innerHTML = '<div class="result" style="display:block">Exportacion cancelada.</div>';
+        return;
+      }
+    }
+    box.innerHTML = `<div class="result" style="display:block">Generando Excel de ${j.total.toLocaleString()} filas...</div>`;
+    const resp = await fetch('/api/exportar?tabla=' + encodeURIComponent(t));
+    if (!resp.ok) { const e = await resp.json().catch(() => null); throw new Error((e && e.error) || 'Error al exportar'); }
+    const exportadas = Number(resp.headers.get('X-Exportadas')) || 0;
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = t.split('.').pop() + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    box.innerHTML = `<div class="result ok" style="display:block"><b>Exportado:</b> ${esc(t)} (${exportadas.toLocaleString()} filas)</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="result err" style="display:block">${esc(e.message)}</div>`;
+  } finally {
+    $('btnExp').disabled = false;
+  }
+});
+
+cargarTablas();
+</script>
+</body>
+</html>
