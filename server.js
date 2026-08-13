@@ -19,12 +19,48 @@ app.get('/api/tablas', wrap(async (req, res) => {
   try { res.json({ ok: true, tablas: await imp.listTables(pool) }); } finally { await pool.close(); }
 }));
 
+async function getKeyMarkers(pool, schema, table) {
+  const r = await pool.request()
+    .input('s', sql.NVarChar, schema)
+    .input('t', sql.NVarChar, table)
+    .query(`
+      SELECT c.COLUMN_NAME, c.DATA_TYPE,
+             CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS es_pk,
+             CASE WHEN uq.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS es_unico
+      FROM INFORMATION_SCHEMA.COLUMNS c
+      LEFT JOIN (
+        SELECT kcu.COLUMN_NAME
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+          ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME AND tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+        WHERE tc.TABLE_SCHEMA = @s AND tc.TABLE_NAME = @t AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+      ) pk ON pk.COLUMN_NAME = c.COLUMN_NAME
+      LEFT JOIN (
+        SELECT col.name AS COLUMN_NAME
+        FROM sys.indexes i
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+        JOIN sys.columns col ON col.object_id = ic.object_id AND col.column_id = ic.column_id
+        WHERE i.object_id = OBJECT_ID(@s + '.' + @t) AND i.is_unique = 1 AND i.is_primary_key = 0
+      ) uq ON uq.COLUMN_NAME = c.COLUMN_NAME
+      WHERE c.TABLE_SCHEMA = @s AND c.TABLE_NAME = @t
+      ORDER BY c.ORDINAL_POSITION;`);
+  return r.recordset;
+}
+
 app.get('/api/columnas', wrap(async (req, res) => {
   const [schema, table] = imp.splitTable(req.query.tabla || '');
   const pool = await sql.connect(imp.getConfig());
   try {
-    const cols = await imp.getTableColumns(pool, schema, table);
-    res.json({ ok: true, columnas: cols.map((c) => ({ nombre: c.COLUMN_NAME, tipo: c.DATA_TYPE })) });
+    const markers = await getKeyMarkers(pool, schema, table);
+    const pk = markers.filter((m) => m.es_pk).map((m) => m.COLUMN_NAME);
+    const unica = markers.find((m) => m.es_unico && !m.es_pk);
+    const sugerida = pk[0] || (unica && unica.COLUMN_NAME) || null;
+    res.json({
+      ok: true,
+      columnas: markers.map((m) => ({ nombre: m.COLUMN_NAME, tipo: m.DATA_TYPE, es_pk: !!m.es_pk, es_unico: !!m.es_unico })),
+      sugerida,
+      tiene_clave_primaria: pk.length > 0,
+    });
   } finally { await pool.close(); }
 }));
 
@@ -84,6 +120,63 @@ function parseFileBuffer(buffer, originalname) {
   return imp.readExcel(buffer);
 }
 
+function bulkType(c) {
+  if (['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext'].includes(c.DATA_TYPE)) return sql.NVarChar(sql.MAX);
+  return imp.typeOf(c);
+}
+
+async function getKeyColumn(pool, schema, table) {
+  const r = await pool.request()
+    .input('s', sql.NVarChar, schema)
+    .input('t', sql.NVarChar, table)
+    .query(`
+      SELECT TOP 1 kcu.COLUMN_NAME
+      FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+      JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+        ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+       AND tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+      WHERE tc.TABLE_SCHEMA = @s
+        AND tc.TABLE_NAME = @t
+        AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+      ORDER BY kcu.ORDINAL_POSITION;
+    `);
+  return r.recordset[0] ? r.recordset[0].COLUMN_NAME : null;
+}
+
+async function findKeyColumn(pool, schema, table, columns) {
+  const pk = await getKeyColumn(pool, schema, table);
+  if (pk) return { clave: pk, advertencia: null };
+
+  const ui = await pool.request()
+    .input('s', sql.NVarChar, schema)
+    .input('t', sql.NVarChar, table)
+    .query(`
+      SELECT TOP 1 c.name AS COLUMN_NAME
+      FROM sys.indexes i
+      JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+      JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+      WHERE i.object_id = OBJECT_ID(@s + '.' + @t)
+        AND i.is_unique = 1 AND i.is_primary_key = 0
+      ORDER BY i.index_id, ic.key_ordinal;
+    `);
+  if (ui.recordset[0]) return { clave: ui.recordset[0].COLUMN_NAME, advertencia: null };
+
+  const prefix = columns.slice(0, 10);
+  const aggs = prefix.map((c, i) => `COUNT(DISTINCT [${c.COLUMN_NAME}]) AS d${i}, COUNT([${c.COLUMN_NAME}]) AS n${i}`).join(', ');
+  const cr = await pool.request().query(`SELECT ${aggs} FROM ${imp.br(schema)}.${imp.br(table)};`);
+  const row = cr.recordset[0];
+  const hit = prefix.findIndex((c, i) => row[`n${i}`] > 0 && row[`d${i}`] === row[`n${i}`]);
+  if (hit !== -1) return { clave: prefix[hit].COLUMN_NAME, advertencia: null };
+
+  const d0 = row.d0 || 0, n0 = row.n0 || 0;
+  return {
+    clave: columns[0].COLUMN_NAME,
+    advertencia: `La tabla ${schema}.${table} no tiene clave primaria, indice unico ni columna sin duplicados. ` +
+      `Se usara '${columns[0].COLUMN_NAME}' como clave, pero tiene ${Math.max(0, n0 - d0)} valores duplicados en la tabla. ` +
+      `Los conteos de INSERT/UPDATE seran aproximados.`,
+  };
+}
+
 app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -94,10 +187,8 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
   let pool;
   try {
     const tabla = req.body.tabla;
-    const clave = req.body.clave;
     if (!req.file) throw new Error('No se recibio ningun archivo.');
     if (!tabla) throw new Error('Selecciona una tabla destino.');
-    if (!clave) throw new Error('Selecciona una columna clave.');
 
     send('progress', { pct: 5, msg: 'Leyendo archivo...' });
     const { rows, sheetName } = parseFileBuffer(req.file.buffer, req.file.originalname);
@@ -111,6 +202,18 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
     send('progress', { pct: 20, msg: 'Obteniendo columnas...' });
     const columns = await imp.getTableColumns(pool, schema, table);
 
+    const pedida = req.body.clave || '';
+    let clave, advertencia = null;
+    if (pedida) {
+      const idx = columns.findIndex((c) => imp.norm(c.COLUMN_NAME) === imp.norm(pedida));
+      if (idx === -1) throw new Error(`La columna clave '${pedida}' no existe en la tabla.`);
+      clave = columns[idx].COLUMN_NAME;
+    } else {
+      const det = await findKeyColumn(pool, schema, table, columns);
+      clave = det.clave;
+      advertencia = det.advertencia;
+    }
+
     send('progress', { pct: 25, msg: 'Mapeando datos...' });
     const proc = imp.processRows(rows, columns, clave);
     const uniqueRows = proc.uniqueRows;
@@ -120,45 +223,23 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
     const allCols = columns.map((c) => c.COLUMN_NAME);
     const setCols = allCols.filter((n) => imp.norm(n) !== imp.norm(clave));
 
-    send('progress', { pct: 28, msg: 'Creando tabla temporal...' });
     const stagingId = `tmp${Date.now()}`;
-    const colDefs = columns.map((c) => {
-      const t = c.DATA_TYPE;
-      if (['varchar', 'nvarchar', 'char', 'nchar'].includes(t)) {
-        const len = c.CHARACTER_MAXIMUM_LENGTH === -1 ? 'MAX' : (c.CHARACTER_MAXIMUM_LENGTH || 255);
-        return `[${c.COLUMN_NAME}] ${t}(${len})`;
-      }
-      if (t === 'decimal' || t === 'numeric') return `[${c.COLUMN_NAME}] ${t}(${c.NUMERIC_PRECISION || 18},${c.NUMERIC_SCALE || 0})`;
-      if (t === 'datetime2') return `[${c.COLUMN_NAME}] datetime2(${c.DATETIME_PRECISION || 7})`;
-      return `[${c.COLUMN_NAME}] ${t}`;
-    }).join(', ');
-    await pool.request().query(`CREATE TABLE ${imp.br(schema)}.${imp.br(stagingId)} (${colDefs});`);
 
-    send('progress', { pct: 30, msg: `Insertando ${total} filas en temporal...` });
+    send('progress', { pct: 28, msg: 'Creando tabla staging...' });
+    await pool.request().query(`SELECT TOP 0 * INTO ${imp.br(schema)}.${imp.br(stagingId)} FROM ${qualified};`);
 
-    const ROWS_PER_BATCH = 40;
-    const colNames = allCols.map((n) => `[${n}]`).join(', ');
-    const numCols = columns.length;
+    send('progress', { pct: 30, msg: `Insertando ${total} filas en staging...` });
 
-    for (let i = 0; i < total; i += ROWS_PER_BATCH) {
-      const batch = uniqueRows.slice(i, i + ROWS_PER_BATCH);
-      const req = pool.request();
-      const valueClauses = [];
-
-      batch.forEach((vals, bIdx) => {
-        const placeholders = [];
-        columns.forEach((c, j) => {
-          const pname = `r${bIdx}_${j}`;
-          req.input(pname, imp.typeOf(c), vals[j]);
-          placeholders.push(`@${pname}`);
-        });
-        valueClauses.push(`(${placeholders.join(',')})`);
-      });
-
-      await req.query(`INSERT INTO ${imp.br(schema)}.${imp.br(stagingId)} (${colNames}) VALUES ${valueClauses.join(',')}`);
-
-      if (i % 2000 === 0 || i + ROWS_PER_BATCH >= total) {
-        send('progress', { pct: Math.round(30 + ((i + batch.length) / total) * 20), msg: `Temporal: ${Math.min(i + batch.length, total)} de ${total}...` });
+    const BATCH = 500;
+    for (let i = 0; i < total; i += BATCH) {
+      const batch = uniqueRows.slice(i, i + BATCH);
+      const tbl = new sql.Table(stagingId);
+      tbl.create = false;
+      columns.forEach((c) => tbl.columns.add(c.COLUMN_NAME, bulkType(c), { nullable: true }));
+      for (const vals of batch) tbl.rows.add(...vals);
+      await pool.request().bulk(tbl);
+      if (i % 5000 === 0 || i + BATCH >= total) {
+        send('progress', { pct: Math.round(30 + ((i + batch.length) / total) * 20), msg: `Staging: ${Math.min(i + batch.length, total)} de ${total}...` });
       }
     }
 
@@ -167,7 +248,6 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
     const countBefore = await pool.request().query(`SELECT COUNT(*) AS c FROM ${qualified};`);
     const beforeCount = countBefore.recordset[0].c;
 
-    const srcCols = columns.map((c) => `s.[${c.COLUMN_NAME}]`).join(', ');
     const tgtCols = allCols.map((n) => `[${n}]`).join(', ');
     const onClause = imp.br(clave);
     const updateSet = setCols.map((n) => `t.[${n}] = s.[${n}]`).join(', ');
@@ -193,7 +273,7 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
     send('done', {
       archivo: req.file.originalname, tabla, clave,
       totalFilas, filasValidas: total, duplicadas: proc.duplicadas, omitidas: proc.skipped.length,
-      insertados: netNew, actualizados: total - netNew, errores: 0,
+      insertados: netNew, actualizados: total - netNew, errores: 0, advertencia,
     });
     res.end();
   } catch (e) {

@@ -14,7 +14,11 @@ const getConfig = () => ({
   requestTimeout: 600000,
 });
 
-const MAX_LEN = (c) => (c.CHARACTER_MAXIMUM_LENGTH === -1 ? sql.MAX : c.CHARACTER_MAXIMUM_LENGTH);
+const MAX_LEN = (c) => {
+  const len = c.CHARACTER_MAXIMUM_LENGTH;
+  if (len === -1 || len == null || len === undefined) return sql.MAX;
+  return len;
+};
 
 const TYPES = {
   bigint: () => sql.BigInt,
@@ -62,11 +66,19 @@ const excelSerialToDate = (serial) => {
 const toDbValue = (v, col) => {
   if (v === null || v === undefined || v === '') return null;
   if (v instanceof Date) return v;
+  const isString = ['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext'].includes(col.DATA_TYPE);
   if (typeof v === 'number') {
     if (IS_DATE(col.DATA_TYPE)) return excelSerialToDate(v);
+    if (isString) return String(v);
     return v;
   }
-  return String(v);
+  const s = String(v).trim();
+  if (IS_DATE(col.DATA_TYPE) && s) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d;
+    return null;
+  }
+  return s;
 };
 
 const splitTable = (t) => {
@@ -89,7 +101,7 @@ const getTableColumns = async (pool, schema, table) => {
     .input('s', sql.NVarChar, schema)
     .input('t', sql.NVarChar, table)
     .query(`SELECT c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION,
-                   c.NUMERIC_SCALE, c.DATETIME_PRECISION, col.is_identity
+                   c.NUMERIC_SCALE, c.DATETIME_PRECISION, c.COLLATION_NAME, col.is_identity, col.is_computed
             FROM INFORMATION_SCHEMA.COLUMNS c
             JOIN sys.columns col
               ON col.object_id = OBJECT_ID(@s + '.' + @t) AND col.name = c.COLUMN_NAME
@@ -98,7 +110,7 @@ const getTableColumns = async (pool, schema, table) => {
   if (!r.recordset.length) {
     throw new Error(`Tabla '${schema}.${table}' no encontrada en la base.`);
   }
-  return r.recordset.filter((c) => !c.is_identity);
+  return r.recordset.filter((c) => !c.is_identity && !c.is_computed);
 };
 
 const readExcel = (buffer, sheetName) => {
@@ -124,6 +136,10 @@ const processRows = (rows, columns, key) => {
     throw new Error(`La columna clave '${key}' no existe en el Excel. Columnas encontradas: ${headers.filter(Boolean).join(', ')}`);
   }
 
+  const keyCol = columns[keyIdx];
+  const ciCollation = !!keyCol.COLLATION_NAME && /(_CI|_AI)(_|$)/i.test(keyCol.COLLATION_NAME);
+  const normKey = (v) => (ciCollation ? String(v).toLowerCase() : String(v));
+
   const indexes = columns.map((c) => ({ col: c, idx: headerIdx.get(norm(c.COLUMN_NAME)) }));
   const noMap = indexes.filter((x) => x.idx === undefined).map((x) => x.col.COLUMN_NAME);
 
@@ -135,7 +151,7 @@ const processRows = (rows, columns, key) => {
     const keyVal = row[keyIdx] == null ? null : row[keyIdx];
     if (keyVal === null) { skipped.push(r + 1); continue; }
     const values = indexes.map(({ col, idx }) => (idx === undefined ? null : toDbValue(row[idx], col)));
-    seen.set(String(keyVal), values);
+    seen.set(normKey(keyVal), values);
   }
 
   return {
