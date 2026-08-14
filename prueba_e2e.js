@@ -1,15 +1,8 @@
 const { execSync } = require('child_process');
-const sql = require('mssql');
+const { sql, getConfig } = require('./sql');
 require('dotenv').config();
 
-const config = {
-  server: process.env.DB_SERVER,
-  port: Number(process.env.DB_PORT) || 1433,
-  database: process.env.DB_DATABASE,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  options: { encrypt: false, trustServerCertificate: true },
-};
+const config = getConfig();
 
 const run = (args) => execSync(`node ${args.join(' ')}`, { stdio: 'inherit', encoding: 'utf8' });
 

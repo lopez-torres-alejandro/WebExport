@@ -3,40 +3,113 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Herramienta SQL Server</title>
+<title>Herramienta SQL Server — Carga y Exportacion</title>
 <style>
-  *{box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;margin:0;padding:0;color:#1f2937}
-  .topbar{background:#1e293b;color:#fff;padding:14px 28px;font-size:16px;font-weight:600;letter-spacing:.3px}
-  .container{max-width:860px;margin:0 auto;padding:28px 20px}
-  .card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:28px;margin-bottom:24px}
-  .card h2{font-size:18px;margin:0 0 20px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px}
-  label{display:block;font-weight:600;margin:14px 0 6px;font-size:13px;color:#374151;text-transform:uppercase;letter-spacing:.4px}
-  select{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;background:#fff;transition:border-color .2s}
-  select:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
-  .row{display:flex;gap:14px}
-  .row>div{flex:1}
-  .btn{margin-top:18px;background:#2563eb;color:#fff;border:0;padding:12px 22px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s,transform .1s}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2f7,#e3e9f2);min-height:100vh;color:#1e293b}
+  .topbar{background:#0f172a;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .topbar .brand{font-size:17px;font-weight:700;letter-spacing:.3px}
+  .topbar .brand span{color:#38bdf8}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:#065f46;display:inline-flex;align-items:center;gap:6px}
+  .badge.err{background:#7f1d1d}
+  .container{max-width:980px;margin:28px auto;padding:0 16px;display:grid;gap:20px}
+  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 18px rgba(15,23,42,.07);border:1px solid #e2e8f0}
+  .card h2{font-size:18px;margin-bottom:18px;color:#0f172a}
+  label{display:block;font-size:13px;font-weight:600;color:#334155;margin:16px 0 6px}
+  .micro{font-size:11px;font-weight:400;color:#94a3b8}
+  .row{display:flex;gap:18px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:260px}
+
+  /* Combo de tablas */
+  .combo-shell{position:relative}
+  .combo-trigger{width:100%;padding:11px 14px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;font-size:14px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .combo-trigger:hover{border-color:#94a3b8}
+  .combo-trigger .combo-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a}
+  .combo-trigger .ph{color:#94a3b8}
+  .combo-caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #64748b;flex:none}
+  .combo-panel{position:absolute;z-index:50;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);overflow:hidden}
+  .combo-tools{padding:10px 10px 8px;border-bottom:1px solid #f1f5f9;display:flex;flex-direction:column;gap:8px}
+  .combo-search{padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;width:100%}
+  .combo-tiny{background:none;border:none;color:#64748b;font-size:10.5px;text-align:left;cursor:pointer;padding:2px 4px;border-radius:6px}
+  .combo-tiny:hover{background:#f1f5f9;color:#0f172a}
+  .combo-list{max-height:300px;overflow-y:auto;padding:4px}
+  .combo-item{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border:none;background:none;cursor:pointer;border-radius:8px;font-size:13.5px;text-align:left}
+  .combo-item:hover{background:#eff6ff}
+  .combo-item .nm{font-weight:600;color:#1e293b}
+  .combo-item .sc{font-size:10.5px;color:#94a3b8;background:#f1f5f9;border-radius:5px;padding:2px 6px}
+  .combo-empty{padding:14px;font-size:12.5px;color:#94a3b8;text-align:center}
+
+  /* Chips de clave */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;min-height:42px;padding:8px;border:1.5px dashed #cbd5e1;border-radius:10px;background:#f8fafc;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:20px;padding:5px 8px 5px 12px;font-size:13px;font-weight:600}
+  .chip-x{background:none;border:none;color:#60a5fa;font-size:15px;cursor:pointer;padding:0 4px;line-height:1}
+  .chip-x:hover{color:#1d4ed8}
+  .chips-empty{color:#94a3b8;font-size:12.5px}
+  .tools-row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .btn{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
   .btn:hover{background:#1d4ed8}
-  .btn:active{transform:scale(.98)}
-  .btn:disabled{background:#93c5fd;cursor:not-allowed}
+  .btn:disabled{background:#cbd5e1;cursor:not-allowed}
   .btn-green{background:#059669}
   .btn-green:hover{background:#047857}
-  .btn-green:disabled{background:#6ee7b7}
+  .btn-ghost{background:#fff;color:#2563eb;border:1.5px solid #bfdbfe;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-ghost:hover{background:#eff6ff}
+  .brand .ic{width:19px;height:19px;vertical-align:-4px;margin-right:6px}
+  .ic{width:17px;height:17px;vertical-align:-3.5px;display:inline-block;flex:none}
+  .ic-sm{width:13px;height:13px;vertical-align:-2px;display:inline-block;flex:none}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:1px}
+  .badge .ic{width:17px;height:17px;vertical-align:-3.5px;display:inline-block;flex:none}
+  .linkbtn{background:none;border:none;color:#2563eb;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 6px;border-radius:6px}
+  .linkbtn:hover{background:#eff6ff}
+  .spinner{display:inline-block;width:14px;height:14px;border:2.5px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
 
-  .dropzone{border:2px dashed #cbd5e1;border-radius:12px;padding:40px 20px;text-align:center;transition:all .2s;cursor:pointer;margin-top:14px;background:#fafbfc}
+  .drop-col{position:relative;max-width:420px}
+  .col-panel{position:absolute;z-index:40;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:8px;max-height:280px;overflow-y:auto}
+  .col-item{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:none;background:none;cursor:pointer;border-radius:8px;font-size:13px;text-align:left}
+  .col-item:hover{background:#eff6ff}
+  .col-item .nm{font-weight:600}
+  .col-item .tp{font-size:10.5px;color:#94a3b8}
+  .col-item.sel{opacity:.55;cursor:default}
+  .col-item.sel:hover{background:none}
+  .tag{font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px;margin-left:6px}
+  .tag.pk{background:#dcfce7;color:#15803d}
+  .tag.reco{background:#fef9c3;color:#a16207}
+
+  /* Recomendacion */
+  .reco{margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13.5px;display:flex;gap:10px;align-items:flex-start;line-height:1.5}
+  .reco[hidden]{display:none}
+  .reco.star{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+  .reco.pkbox{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+  .reco.warn{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .reco .tic{font-size:16px}
+  .reco .micro{display:block;margin-top:2px}
+
+  /* Favoritos */
+  .favs{margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0}
+  .favs-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .fav-list{display:grid;gap:8px}
+  .fav{background:#fafbfc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px}
+  .fav:hover{border-color:#cbd5e1}
+  .fav-main{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .fav-apply{background:none;border:none;color:#0f172a;font-size:13.5px;font-weight:600;cursor:pointer;text-align:left;padding:0}
+  .fav-apply:hover{color:#2563eb}
+  .fav-del{background:none;border:none;color:#94a3b8;font-size:13px;cursor:pointer;padding:2px 6px;border-radius:6px}
+  .fav-del:hover{color:#dc2626;background:#fef2f2}
+  .fav-micro{font-size:10.5px;color:#94a3b8;margin-top:3px;word-break:break-all}
+
+  .dropzone{border:2px dashed #cbd5e1;border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:.15s;background:#f8fafc}
   .dropzone:hover,.dropzone.dragover{border-color:#2563eb;background:#eff6ff}
-  .dropzone-icon{font-size:42px;margin-bottom:10px;opacity:.5}
-  .dropzone p{margin:4px 0;font-size:14px;color:#64748b}
-  .dropzone .main-text{font-size:15px;font-weight:600;color:#334155}
-  .dropzone input[type=file]{display:none}
-
-  .file-info{display:none;margin-top:12px;padding:10px 14px;background:#f1f5f9;border-radius:8px;font-size:13px;color:#475569;align-items:center;gap:10px}
-  .file-info .name{font-weight:600;color:#1e293b}
-  .file-info .remove{margin-left:auto;cursor:pointer;color:#ef4444;font-weight:700;font-size:16px}
+  .dropzone-icon .ic{width:36px;height:36px;vertical-align:-8px;color:#2563eb}
+  .dropzone .main-text{font-weight:700;font-size:15px;color:#1e293b;margin-top:6px}
+  .dropzone p{font-size:12.5px;color:#64748b;margin-top:2px}
+  .file-info{display:none;align-items:center;gap:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:11px 14px;font-size:13px;margin-top:10px}
+  .file-info .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-info .small{color:#94a3b8}
+  .file-info .remove{margin-left:auto;cursor:pointer;color:#94a3b8;font-size:17px;padding:0 4px}
+  .file-info .remove:hover{color:#dc2626}
 
   .progress-wrap{display:none;margin-top:20px}
-  .progress-bar{height:28px;background:#e2e8f0;border-radius:14px;overflow:hidden;position:relative}
+  .progress-bar{height:24px;background:#e2e8f0;border-radius:14px;overflow:hidden;position:relative}
   .progress-fill{height:100%;background:linear-gradient(90deg,#2563eb,#3b82f6);border-radius:14px;transition:width .3s ease;width:0%;display:flex;align-items:center;justify-content:flex-end;padding-right:10px}
   .progress-fill.done{background:linear-gradient(90deg,#059669,#10b981)}
   .progress-fill.error{background:linear-gradient(90deg,#dc2626,#ef4444)}
@@ -47,65 +120,248 @@
   .result.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
   .result.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
   .result h3{margin:0 0 10px;font-size:16px}
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin-top:12px}
   .stat{background:#fff;border-radius:8px;padding:12px;text-align:center;border:1px solid #e2e8f0}
-  .stat .num{font-size:24px;font-weight:700;color:#1e293b}
-  .stat .lbl{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .stat .num{font-size:23px;font-weight:700;color:#1e293b}
+  .stat .lbl{font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
   .stat.green .num{color:#059669}
   .stat.blue .num{color:#2563eb}
   .stat.red .num{color:#dc2626}
   .stat.gray .num{color:#9ca3af}
-
   .warn-box{background:#fefce8;border:1px solid #fde047;color:#854d0e;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.5}
-  .clave-aviso{margin-top:8px;background:#fefce8;border:1px solid #fde047;color:#854d0e;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5}
 
   .preview-wrap{overflow:auto;max-height:320px;margin-top:12px}
-  table.data{border-collapse:collapse;font-size:13px;width:100%}
-  table.data th,table.data td{border:1px solid #e2e8f0;padding:7px 10px;text-align:left;white-space:nowrap}
-  table.data th{background:#f8fafc;font-weight:600;position:sticky;top:0}
-  .small{font-size:12px;color:#64748b}
+  .data{border-collapse:collapse;width:100%;font-size:12px}
+  .data th,.data td{border:1px solid #e2e8f0;padding:6px 9px;text-align:left;white-space:nowrap}
+  .data th{background:#f1f5f9;color:#334155}
 
-  .spinner{display:inline-block;width:18px;height:18px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
-  @keyframes spin{to{transform:rotate(360deg)}}
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+  .overlay[hidden]{display:none}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:460px;max-height:86vh;overflow-y:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+  .modal h3{font-size:16px;margin-bottom:4px}
+  .modal .micro{display:block;margin-bottom:14px}
+  .modal input[type=text]{width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:14px;margin-top:6px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .modal-list{display:grid;gap:6px;max-height:230px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:9px;padding:10px;margin-top:6px}
+  .modal-list label{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:400;color:#334155;margin:0;padding:4px 6px;border-radius:6px;cursor:pointer}
+  .modal-list label:hover{background:#f8fafc}
+  .modal-list input{margin:0}
+  .vis-actions{display:flex;gap:8px;margin:10px 0 4px}
+  .btn-sm{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#334155;cursor:pointer}
+  .btn-sm:hover{background:#e2e8f0}
+
+  /* Carga por periodo */
+  .card[hidden]{display:none}
+  .filtros-head{display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px}
+  .filtro-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .filtro-row select,.filtro-row input{flex:1 1 0;min-width:0;padding:9px 10px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;color:#0f172a}
+  .filtro-row .fx{background:none;border:none;color:#94a3b8;font-size:15px;cursor:pointer;flex:none;padding:4px 8px;border-radius:8px}
+  .filtro-row .fx:hover{color:#dc2626;background:#fef2f2}
+  .filtro-row{position:relative}
+  .calp-label{font-size:12.5px;font-weight:700;color:#334155;margin-right:4px}
+  .periodo-fila{display:flex;gap:8px;align-items:center;margin:10px 0}
+  .periodo-fila select{flex:1 1 0;min-width:0;padding:9px 10px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;color:#0f172a}
+  .periodo-fila select:disabled{background:#f1f5f9;color:#94a3b8}
+  .periodo-fila select option:disabled{color:#94a3b8}
+  .fx-cal{background:none;border:none;cursor:pointer;flex:none;padding:4px 6px;border-radius:8px;color:#475569;display:flex;align-items:center}
+  .fx-cal:hover{background:#eef2ff;color:#4f46e5}
+  .cal-pop{position:fixed;z-index:80;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:12px;min-width:252px}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px}
+  .cal-head b{font-size:13px;color:#0f172a;text-transform:capitalize}
+  .cal-nav{background:none;border:none;color:#4f46e5;font-size:14px;cursor:pointer;padding:2px 10px;border-radius:6px}
+  .cal-nav:hover{background:#eef2ff}
+  .cal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .cal-grid.dias{grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal-dow{font-size:10px;font-weight:700;color:#94a3b8;text-align:center;padding:3px 0}
+  .cal-btn{border:1px solid #e2e8f0;background:#f8fafc;color:#0f172a;font-size:12.5px;font-weight:600;padding:7px 0;border-radius:8px;cursor:pointer;transition:background .12s,border-color .12s}
+  .cal-btn:hover:not(.off){background:#eef2ff;border-color:#c7d2fe}
+  .cal-btn.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .cal-btn.off{opacity:.28;cursor:default}
+  .cal-hint{font-size:11px;color:#94a3b8;margin-top:8px}
+  .cal-dia-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:2px}
+  .sug-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px}
+  .sug-chip{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:16px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer}
+  .sug-chip:hover{background:#dbeafe}
+  .sug-chip.added{opacity:.45;cursor:default}
+  .resumen{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-top:8px;font-size:13px;line-height:1.6}
+  .resumen[hidden]{display:none}
+  .resumen .fchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .resumen .fchip{background:#e0f2fe;border:1px solid #7dd3fc;color:#075985;border-radius:14px;padding:3px 10px;font-size:12px;font-weight:600}
+  .resumen .fchip b{font-weight:700}
+  .recuento{font-weight:700;color:#0369a1}
+  .mes-actions{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
+
+  /* Calendario unificado del periodo (flotante, rango) */
+  .calp-rango{display:flex;gap:8px;align-items:center;margin:14px 0 2px}
+  .calp-rango[hidden]{display:none}
+  .calp-trigger{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;padding:10px 12px;background:#fff;border:1.5px dashed #c7d2fe;border-radius:12px;color:#3730a3;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
+  .calp-trigger:hover{background:#eef2ff;border-color:#818cf8}
+  .calp-trigger[hidden]{display:none}
+  .calp-trigger.set{border-style:solid;border-color:#10b981;background:#f0fdf4;color:#065f46}
+  .calp-trigger.set .calp-ic{color:#059669}
+  .calp-guion{color:#94a3b8;font-weight:700;flex:none}
+  .calp-x{flex:none;width:30px;height:30px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#94a3b8;font-size:16px;cursor:pointer;line-height:1}
+  .calp-x:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626}
+  .calp-ic{color:#4f46e5;flex:none;width:18px;height:18px}
+  .calp-chev{margin-left:auto;color:#818cf8;flex:none;width:14px;height:14px}
+  .calp-trigger.sel .calp-ic{color:#059669}
+  .calp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .calp-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;color:#0f172a}
+  .calp-title svg{color:#4f46e5}
+  .calp-btns{display:flex;gap:6px}
+  .calp-nav{background:#fff;border:1px solid #cbd5e1;border-radius:8px;width:30px;height:30px;font-size:14px;color:#334155;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .calp-nav:hover{background:#eef2ff;border-color:#c7d2fe;color:#4f46e5}
+  .calp-month,.calp-pill{display:inline-flex;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+  .calp-month{min-width:132px;height:30px;padding:0 10px;font-size:13px;font-weight:700;color:#4f46e5;text-transform:capitalize}
+  .calp-pill{height:30px;padding:0 10px;min-width:44px;font-size:13px;font-weight:700;color:#4f46e5}
+  .calp-month:hover,.calp-pill:hover{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}
+  .calp-yearrow{display:flex;gap:6px;margin-top:8px;align-items:center}
+  .calp-yeargo{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;font-size:12.5px;color:#0f172a;outline:none;background:#fff}
+  .calp-yeargo:focus{border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .calp-toolbar{display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
+  .calp-tool{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:5px 12px;font-size:11.5px;font-weight:600;color:#475569;cursor:pointer}
+  .calp-tool:hover{background:#eef2ff;border-color:#c7d2fe;color:#4f46e5}
+  .calp-tool.primary{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-tool.primary:hover{background:#4338ca}
+  .calp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .calp-dow{font-size:10px;font-weight:800;color:#64748b;text-align:center;padding:4px 0;text-transform:uppercase;letter-spacing:.04em}
+  .calp-day{position:relative;border:none;background:#fff;border:1px solid transparent;border-radius:9px;height:38px;font-size:12.5px;font-weight:600;color:#0f172a;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+  .calp-day:hover:not(.off){background:#eef2ff;border-color:#c7d2fe}
+  .calp-day.today{box-shadow:inset 0 0 0 1.5px #818cf8}
+  .calp-day.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-day.enrango{background:#e0e7ff;border-color:#c7d2fe;color:#3730a3}
+  .calp-day.off{opacity:.3;cursor:default;background:transparent}
+  .calp-day.dim{opacity:.38}
+  .calp-grid.meses{grid-template-columns:repeat(4,1fr);gap:6px}
+  .calp-grid.anios{grid-template-columns:repeat(4,1fr);gap:6px}
+  .calp-cell{background:#fff;border:1px solid #e2e8f0;border-radius:10px;height:52px;font-size:12.5px;font-weight:700;color:#0f172a;cursor:pointer;transition:background .12s,border-color .12s}
+  .calp-cell:hover:not(.off){background:#eef2ff;border-color:#c7d2fe}
+  .calp-cell.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-cell.off{opacity:.3;cursor:default}
+  .calp-seleccion{margin-top:10px;padding:8px 10px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;font-size:12px;font-weight:600;color:#3730a3;display:flex;align-items:center;gap:8px;justify-content:space-between}
+  .calp-seleccion[hidden]{display:none}
+  .calp-seleccion .limpia{background:none;border:none;color:#6366f1;font-size:11.5px;font-weight:700;cursor:pointer;text-decoration:underline}
+  .calp-seleccion .limpia:hover{color:#4338ca}
 </style>
 </head>
 <body>
-<div class="topbar">Herramienta SQL Server — Carga y Exportacion de Datos</div>
+
+<div class="topbar">
+  <div class="brand"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg><span>Herramienta SQL Server</span> — Carga y Exportacion de Datos</div>
+  <span class="badge" id="stBadge"><span class="dot"></span>Conectando...</span>
+</div>
 
 <div class="container">
 
-  <!-- CARGAR DATOS -->
-  <div class="card" id="cardCargar">
-    <h2>Cargar datos a SQL Server</h2>
+  <!-- CARGAR POR PERIODO -->
+  <div class="card" id="cardMes">
+    <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Cargar datos</h2>
 
-    <div class="row">
-      <div>
-        <label for="tablaCargar">Tabla destino</label>
-        <select id="tablaCargar"><option value="">Cargando tablas...</option></select>
+    <label>Tabla destino</label>
+    <div id="comboMes"></div>
+
+    <div class="calp-rango" id="calRango" hidden>
+      <button type="button" class="calp-trigger" id="calTriggerDesde" title="Fecha de inicio del periodo">
+        <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="calTxtDesde">Desde (fecha de inicio)</span>
+      </button>
+      <span class="calp-guion">–</span>
+      <button type="button" class="calp-trigger" id="calTriggerHasta" title="Fecha final del periodo">
+        <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="calTxtHasta">Hasta (fecha final)</span>
+      </button>
+      <button type="button" class="calp-x" id="calLimpiaRango" title="Limpiar rango">&times;</button>
+    </div>
+    <div id="calPop" class="cal-pop calp-pop" style="display:none"></div>
+
+    <div class="calp-rango" id="periodoSel" hidden>
+      <span class="calp-label">Periodo (mes y año)</span>
+      <div class="periodo-fila">
+        <select id="selMes" title="Mes del periodo"></select>
+        <select id="selAnio" title="Año del periodo"></select>
       </div>
-      <div>
-        <label for="claveCargar">Columna clave (identifica cada fila)</label>
-        <select id="claveCargar" disabled><option value="">Primero elige la tabla</option></select>
-        <div class="clave-aviso" id="claveAviso" style="display:none"></div>
+      <button type="button" class="calp-x" id="calLimpiaPeriodo" title="Volver al periodo actual (mes actual)">&times;</button>
+    </div>
+
+    <div class="resumen" id="resumenMes" hidden>
+      <b>Resumen de la carga:</b>
+      <div class="fchips" id="resumenChips"></div>
+      <div id="resumenCount">Consultando filas existentes...</div>
+    </div>
+
+    <label>Archivo</label>
+    <div class="dropzone" id="dropZoneMes">
+      <div class="dropzone-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+      <p class="main-text">Arrastra el archivo aqui</p>
+      <p>Excel (.xlsx, .xls), CSV o ZIP</p>
+      <p>o haz clic para seleccionar</p>
+      <input type="file" id="archivoMes" accept=".xlsx,.xls,.csv,.zip" style="display:none">
+    </div>
+    <div class="file-info" id="fileInfoMes">
+      <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+      <span class="name" id="fileNameMes"></span>
+      <span class="small" id="fileSizeMes"></span>
+      <span class="remove" id="fileRemoveMes" title="Quitar archivo">&times;</span>
+    </div>
+
+    <div class="mes-actions">
+      <button class="btn" id="btnCargarMes" disabled>Cargar datos</button>
+    </div>
+
+    <div class="progress-wrap" id="progressWrapMes">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFillMes"><span class="progress-pct" id="progressPctMes">0%</span></div>
       </div>
+      <div class="progress-msg" id="progressMsgMes">Preparando...</div>
+    </div>
+
+    <div class="result" id="resultMes"></div>
+  </div>
+
+  <!-- CARGAR -->
+  <div class="card" id="cardCargar" hidden>
+    <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Cargar datos a SQL Server</h2>
+
+    <label>Tabla destino</label>
+    <div id="comboCargar"></div>
+
+    <label>Columna(s) clave <span class="micro">— definen como se identifica cada fila (INSERT si es nueva, UPDATE si ya existe)</span></label>
+    <div class="chips" id="chipsClave"><span class="chips-empty">Sin columnas seleccionadas</span></div>
+    <div class="tools-row">
+      <div class="drop-col" id="dropColWrap">
+        <button class="btn-ghost" id="btnAddCol" type="button">+ Agregar columna clave</button>
+        <div class="col-panel" id="colPanel" hidden></div>
+      </div>
+      <span class="micro" id="chipsHint"></span>
+    </div>
+    <div class="reco" id="recoBox" hidden></div>
+
+    <div class="favs">
+      <div class="favs-head">
+        <b><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color:#f59e0b;vertical-align:-3px"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Favoritos</b>
+        <button class="linkbtn" id="btnSaveFav" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar combinacion actual</button>
+      </div>
+      <div class="fav-list" id="favList"><div class="combo-empty">Elige una tabla para ver sus combinaciones guardadas.</div></div>
     </div>
 
     <label>Archivo</label>
     <div class="dropzone" id="dropZone">
-      <div class="dropzone-icon">&#128206;</div>
+      <div class="dropzone-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
       <p class="main-text">Arrastra un archivo aqui</p>
       <p>Excel (.xlsx, .xls), CSV o ZIP</p>
       <p>o haz clic para seleccionar</p>
-      <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.zip">
+      <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.zip" style="display:none">
     </div>
     <div class="file-info" id="fileInfo">
-      <span>&#128196;</span>
+      <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
       <span class="name" id="fileName"></span>
       <span class="small" id="fileSize"></span>
       <span class="remove" id="fileRemove" title="Quitar archivo">&times;</span>
     </div>
 
-    <button class="btn" id="btnCargar" disabled>Cargar datos</button>
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn" id="btnCargar" disabled>Cargar datos</button>
+    </div>
 
     <div class="progress-wrap" id="progressWrap">
       <div class="progress-bar">
@@ -119,83 +375,471 @@
 
   <!-- EXPORTAR -->
   <div class="card" id="cardExportar">
-    <h2>Exportar tabla a Excel</h2>
+    <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Exportar tabla a Excel</h2>
 
-    <label for="tablaExp">Tabla a exportar</label>
-    <select id="tablaExp"><option value="">Cargando tablas...</option></select>
+    <label>Tabla a exportar</label>
+    <div id="comboExp"></div>
 
-    <div style="display:flex;gap:12px;margin-top:18px">
+    <label id="lblCalRangoExp" for="expCalDesde" hidden>Periodo a exportar (filtro por fecha)</label>
+    <div class="calp-rango" id="calRangoExp" hidden>
+      <button type="button" class="calp-trigger" id="expCalDesde" data-calmodo="exp" title="Fecha de inicio del periodo">
+        <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="expTxtDesde">Desde (fecha de inicio)</span>
+      </button>
+      <span class="calp-guion">–</span>
+      <button type="button" class="calp-trigger" id="expCalHasta" data-calmodo="exp" title="Fecha final del periodo">
+        <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="expTxtHasta">Hasta (fecha final)</span>
+      </button>
+      <button type="button" class="calp-x" id="expCalLimpia" title="Limpiar rango">&times;</button>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
       <button class="btn btn-green" id="btnVista">Vista previa (10 filas)</button>
       <button class="btn" id="btnExp">Exportar tabla completa</button>
     </div>
     <div id="resultadoExp"></div>
   </div>
 
+  <button class="linkbtn" id="btnShowOld" type="button" style="justify-self:center">Mostrar carga avanzada (claves)</button>
+
+</div>
+
+<!-- Modal: guardar favorito -->
+<div class="overlay" id="overlayFav" hidden>
+  <div class="modal">
+    <h3><svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color:#f59e0b;vertical-align:-3px"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Guardar combinacion favorita</h3>
+    <span class="micro">Se guardara en la aplicacion y podras reutilizarla con un clic.</span>
+    <label>Nombre del favorito</label>
+    <input type="text" id="favNombre" placeholder="Ej: Tramas HIS (cita + correlativo)">
+    <label>Columnas de la combinacion</label>
+    <div class="modal-list"><div id="favColsPreview" style="padding:4px 6px;font-size:12.5px;color:#334155"></div></div>
+    <label>Tablas a las que aplica</label>
+    <div class="modal-list" id="favTablas"></div>
+    <div class="modal-actions">
+      <button class="btn-sm" id="btnFavCancel">Cancelar</button>
+      <button class="btn" id="btnFavOk" style="padding:9px 18px">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: visibilidad de tablas -->
+<div class="overlay" id="overlayVis" hidden>
+  <div class="modal">
+    <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg> Tablas a mostrar en los menus</h3>
+    <span class="micro">Las tablas desmarcadas no aparecen en importar ni exportar. Se guarda automaticamente.</span>
+    <div class="vis-actions">
+      <button class="btn-sm" id="btnVisAll">Mostrar todas</button>
+      <button class="btn-sm" id="btnVisNone">Ocultar todas</button>
+      <span class="micro" id="visCount" style="margin-left:auto;align-self:center"></span>
+    </div>
+    <div class="modal-list" id="visList"></div>
+    <div class="modal-actions">
+      <button class="btn" id="btnVisClose" style="padding:9px 18px">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: confirmar carga por periodo -->
+<div class="overlay" id="overlayMes" hidden>
+  <div class="modal">
+    <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Confirmar carga de datos</h3>
+    <span class="micro" id="mesConfirmSub"></span>
+    <div class="warn-box" style="margin-top:12px" id="mesConfirmWarn"></div>
+    <div class="modal-actions">
+      <button class="btn-sm" id="btnMesCancel">Cancelar</button>
+      <button class="btn" id="btnMesOk" style="padding:9px 18px">Continuar</button>
+    </div>
+  </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+const IC = {
+  lamp: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.4 1 2.3h6c0-.9.4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>',
+  key: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
+  warn: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  star: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color:#f59e0b"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+  starSm: '<svg class="ic-sm" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+  check: '<svg class="ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+  sliders: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+};
+const enc = encodeURIComponent;
+
 async function api(url, opts) {
   const r = await fetch(url, opts);
-  const j = await r.json();
+  let j;
+  try { j = await r.json(); } catch (_) { j = { ok: false, error: 'Respuesta invalida del servidor' }; }
   if (!j.ok) throw new Error(j.error || 'Error del servidor');
   return j;
 }
 
-let selectedFile = null;
+const state = {
+  tablas: [],            // [{tabla, visible}]
+  colMeta: [],           // columnas de la tabla seleccionada
+  reco: null,            // recomendacion cacheada
+  chips: [],             // claves seleccionadas
+  currentTable: '',
+  expTable: '',
+};
 
-/* ── Tablas ────────────────────────────────────────────── */
-async function cargarTablas() {
+/* ── Estado de conexion ───────────────────────────────── */
+async function init() {
   try {
-    const j = await api('/api/tablas');
-    const opts = '<option value="">-- elegir tabla --</option>' + j.tablas.map((t) => `<option value="${t}">${t}</option>`).join('');
-    $('tablaCargar').innerHTML = opts;
-    $('tablaExp').innerHTML = opts;
+    const j = await api('/api/tablas/visibilidad');
+    state.tablas = j.tablas;
+    $('stBadge').innerHTML = '<span class="dot"></span>SQL Server conectado';
+    $('stBadge').className = 'badge';
   } catch (e) {
-    $('tablaCargar').innerHTML = `<option value="">${e.message}</option>`;
-    $('tablaExp').innerHTML = `<option value="">${e.message}</option>`;
+    $('stBadge').innerHTML = '<span class="dot"></span>Sin conexion';
+    $('stBadge').className = 'badge err';
+  }
+  comboCar.render();
+  comboExp.render();
+  comboMes.render();
+}
+
+/* ── Combo de tablas (compartido importar/exportar) ───── */
+class TableCombo {
+  constructor(cfg) {
+    this.cfg = cfg;
+    this.value = '';
+    this.open = false;
+    this.filter = '';
+    this.el = $(cfg.rootId);
+    this.el.innerHTML = `
+      <div class="combo-shell">
+        <button class="combo-trigger" type="button"><span class="combo-val ph">${esc(cfg.placeholder)}</span><span class="combo-caret"></span></button>
+        <div class="combo-panel" hidden>
+          <div class="combo-tools">
+            <input class="combo-search" placeholder="Buscar tabla...">
+            <button class="combo-tiny" type="button" data-act="vis">${IC.sliders} tablas a mostrar (letras chiquitas)</button>
+          </div>
+          <div class="combo-list"></div>
+        </div>
+      </div>`;
+    this.trigger = this.el.querySelector('.combo-trigger');
+    this.panel = this.el.querySelector('.combo-panel');
+    this.search = this.el.querySelector('.combo-search');
+    this.list = this.el.querySelector('.combo-list');
+    this.trigger.addEventListener('click', () => this.toggle());
+    this.search.addEventListener('input', () => { this.filter = this.search.value; this.render(); });
+    this.panel.addEventListener('click', (e) => {
+      if (e.target.dataset.act === 'vis') { this.close(); openVis(); }
+      const item = e.target.closest('.combo-item');
+      if (item) {
+        this.setValue(item.dataset.t);
+        this.close();
+        if (this.cfg.onSelect) this.cfg.onSelect(item.dataset.t);
+      }
+    });
+  }
+  toggle() {
+    this.open = !this.open;
+    this.panel.hidden = !this.open;
+    if (this.open) { this.filter = ''; this.search.value = ''; this.render(); this.search.focus(); }
+  }
+  close() { this.open = false; this.panel.hidden = true; }
+  setValue(t) { this.value = t || ''; this.render(); }
+  get visible() { return state.tablas.filter((x) => x.visible).map((x) => x.tabla); }
+  render() {
+    const val = this.value ? `<span class="combo-val">${esc(this.value)}</span>` : `<span class="combo-val ph">${esc(this.cfg.placeholder)}</span>`;
+    this.trigger.innerHTML = `${val}<span class="combo-caret"></span>`;
+    if (!this.open) return;
+    const q = this.filter.toLowerCase();
+    const items = this.visible.filter((t) => t.toLowerCase().includes(q));
+    if (!items.length) {
+      this.list.innerHTML = '<div class="combo-empty">' + (q ? 'Sin coincidencias.' : 'No hay tablas visibles. Usa la opcion de "tablas a mostrar".') + '</div>';
+      return;
+    }
+    this.list.innerHTML = items.map((t) => {
+      const dot = t.lastIndexOf('.');
+      const name = dot > 0 ? t.slice(dot + 1) : t;
+      const sc = dot > 0 ? t.slice(0, dot) : '';
+      const chk = t === this.value ? ' ' + IC.check : '';
+      return `<button class="combo-item" type="button" data-t="${esc(t)}"><span class="nm">${esc(name)}${chk}</span><span class="sc">${esc(sc)}</span></button>`;
+    }).join('');
+  }
+}
+const comboCar = new TableCombo({ rootId: 'comboCargar', placeholder: 'Elegir tabla para importar...', onSelect: onTableSelected });
+const comboExp = new TableCombo({ rootId: 'comboExp', placeholder: 'Elegir tabla para exportar...', onSelect: onExpTable });
+const comboMes = new TableCombo({ rootId: 'comboMes', placeholder: 'Elegir tabla para importar por periodo...', onSelect: onMesTable });
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.combo-shell')) { comboCar.close(); comboExp.close(); comboMes.close(); }
+  if (!e.target.closest('.drop-col')) $('colPanel').hidden = true;
+});
+
+/* ── Seleccion de tabla (importar) ────────────────────── */
+async function onTableSelected(tabla) {
+  state.currentTable = tabla;
+  state.chips = [];
+  state.colMeta = [];
+  state.reco = null;
+  renderChips();
+  renderFavs();
+  $('recoBox').hidden = true;
+  $('colPanel').hidden = true;
+  if (!tabla) return;
+  try {
+    const j = await api('/api/columnas?tabla=' + enc(tabla));
+    if (state.currentTable !== tabla) return;
+    state.colMeta = j.columnas;
+    state.reco = j.recomendada;
+    if (j.recomendada) {
+      state.chips = j.recomendada.columnas.filter((c) => state.colMeta.some((m) => m.nombre === c));
+      renderChips(); showReco();
+    } else if (j.sugerida && j.sugerida.length) {
+      state.chips = j.sugerida;
+      renderChips();
+      showReco();
+      if (!j.tiene_clave_primaria) autoAnalizar(tabla);
+    } else if (j.tiene_clave_primaria) {
+      showReco();
+    } else {
+      autoAnalizar(tabla);
+    }
+  } catch (e) {
+    recoWarn(e.message);
   }
 }
 
-async function cargarColumnas() {
-  const t = $('tablaCargar').value;
-  const sel = $('claveCargar');
-  const aviso = $('claveAviso');
-  if (!t) {
-    sel.disabled = true;
-    sel.innerHTML = '<option value="">Primero elige la tabla</option>';
-    aviso.style.display = 'none';
+async function autoAnalizar(tabla) {
+  $('recoBox').innerHTML = `<span class="spinner"></span><span><b>Analizando duplicados de la tabla...</b><span class="micro">Primera vez: puede tardar unos segundos. Despues se guarda en cache.</span></span>`;
+  $('recoBox').className = 'reco star';
+  $('recoBox').hidden = false;
+  try {
+    const a = await api('/api/analizar?tabla=' + enc(tabla));
+    if (state.currentTable !== tabla) return;
+    state.reco = a;
+    state.chips = a.columnas.filter((c) => state.colMeta.some((m) => impName(m.nombre, c)));
+    renderChips(); showReco();
+  } catch (e) {
+    if (state.currentTable === tabla) recoWarn(e.message);
+  }
+}
+const impName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
+function showReco() {
+  const box = $('recoBox');
+  const r = state.reco;
+  const cols = r ? r.columnas : [];
+  if (r) {
+    const aplicada = cols.length === state.chips.length && cols.every((c) => state.chips.some((n) => impName(n, c)));
+    const pctTxt = r.pct != null && r.total != null ? ` — ${r.pct}% unico en la tabla (${r.unicos.toLocaleString()} de ${r.total.toLocaleString()})` : ' — columna(s) definidas como clave';
+    const accion = aplicada
+      ? '<span class="tag pk">EN USO</span>'
+      : '<button class="linkbtn" id="btnRecoUsar" type="button">Usar esta recomendacion</button>';
+    box.innerHTML = `<span class="tic">${IC.lamp}</span><span><b>Recomendacion: ${esc(cols.join(' + '))}</b>${esc(pctTxt)}<span class="micro">Fuente: ${r.origen === 'pk' ? 'clave primaria de la tabla' : r.origen === 'indice-unico' ? 'indice unico' : 'analisis de duplicados en datos reales'}. Sugerencia automatica, no es un favorito guardado: puedes usarla, cambiarla o guardarla como favorito.</span>${accion}</span>`;
+    box.className = 'reco star';
+    const btn = box.querySelector('#btnRecoUsar');
+    if (btn) btn.addEventListener('click', () => { if (state.reco) { state.chips = state.reco.columnas.slice(); renderChips(); showReco(); } });
+  } else if (state.colMeta.some((m) => m.es_pk)) {
+    box.innerHTML = `<span class="tic">${IC.key}</span><span><b>Clave primaria usada por defecto.</b><span class="micro">Puedes agregar o quitar columnas libremente.</span></span>`;
+    box.className = 'reco pkbox';
+  }
+  box.hidden = false;
+}
+
+function recoWarn(msg) {
+  const box = $('recoBox');
+  box.innerHTML = `<span class="tic">${IC.warn}</span><span><b>Aviso:</b> ${esc(msg)}. Elige manualmente las columnas clave.</span>`;
+  box.className = 'reco warn';
+  box.hidden = false;
+}
+
+/* ── Chips de clave ────────────────────────────────────── */
+function renderChips() {
+  const c = $('chipsClave');
+  if (!state.chips.length) {
+    c.innerHTML = '<span class="chips-empty">Sin columnas seleccionadas</span>';
+    $('chipsHint').textContent = state.currentTable ? 'Elige la minima combinacion que identifique cada fila.' : '';
+  } else {
+    c.innerHTML = state.chips.map((n) => `<span class="chip">${esc(n)}<button class="chip-x" data-col="${esc(n)}" title="Quitar">&times;</button></span>`).join('');
+    $('chipsHint').textContent = 'Clave: ' + state.chips.join(' + ');
+  }
+  refreshBtn();
+}
+
+function refreshBtn() {
+  $('btnCargar').disabled = !state.currentTable || !selectedFile || !state.chips.length;
+}
+
+$('chipsClave').addEventListener('click', (e) => {
+  const x = e.target.closest('.chip-x');
+  if (x) {
+    state.chips = state.chips.filter((n) => !impName(n, x.dataset.col));
+    renderChips();
+  }
+});
+
+$('btnAddCol').addEventListener('click', () => {
+  const panel = $('colPanel');
+  if (panel.hidden) renderColPanel();
+  panel.hidden = !panel.hidden;
+});
+
+function renderColPanel() {
+  const panel = $('colPanel');
+  if (!state.colMeta.length) {
+    panel.innerHTML = '<div class="combo-empty">Primero elige una tabla.</div>';
     return;
   }
-  sel.disabled = true;
-  sel.innerHTML = '<option value="">Cargando...</option>';
-  aviso.style.display = 'none';
+  const rcols = state.reco ? state.reco.columnas : [];
+  panel.innerHTML = state.colMeta.map((m) => {
+    const sel = state.chips.some((n) => impName(n, m.nombre));
+    const tags = (m.es_pk ? '<span class="tag pk">PK</span>' : '') +
+      (rcols.some((c) => impName(c, m.nombre)) ? `<span class="tag reco">${IC.starSm} REC</span>` : '');
+    return `<button class="col-item${sel ? ' sel' : ''}" type="button" data-col="${esc(m.nombre)}"${sel ? ' disabled' : ''}>
+      <span><span class="nm">${esc(m.nombre)}</span> ${tags}</span><span class="tp">${esc(m.tipo)}</span></button>`;
+  }).join('');
+}
+
+$('colPanel').addEventListener('click', (e) => {
+  const it = e.target.closest('.col-item');
+  if (!it || it.disabled) return;
+  state.chips.push(it.dataset.col);
+  renderChips();
+  renderColPanel();
+  $('colPanel').hidden = false;
+});
+
+/* ── Favoritos ─────────────────────────────────────────── */
+async function renderFavs() {
+  const list = $('favList');
+  if (!state.currentTable) {
+    list.innerHTML = '<div class="combo-empty">Elige una tabla para ver sus combinaciones guardadas.</div>';
+    return;
+  }
+  list.innerHTML = '<div class="combo-empty"><span class="spinner"></span>Cargando favoritos...</div>';
   try {
-    const j = await api('/api/columnas?tabla=' + encodeURIComponent(t));
-    const marcador = (c) => c.es_pk ? ' &#128273; PK' : (c.es_unico ? ' &#9733; Unica' : '');
-    sel.innerHTML = '<option value="">-- elegir columna --</option>' +
-      j.columnas.map((c) => `<option value="${c.nombre}">${esc(c.nombre)} (${c.tipo})${marcador(c)}</option>`).join('');
-    if (j.sugerida) sel.value = j.sugerida;
-    if (!j.tiene_clave_primaria) {
-      aviso.innerHTML = '&#9888; No se encontro clave primaria en la tabla.' +
-        (j.columnas.some((c) => c.es_unico)
-          ? ' Se preselecciono una columna con indice unico.'
-          : ' Elige una columna que identifique cada fila (sin duplicados); si eliges una con duplicados, los conteos seran aproximados.');
-      aviso.style.display = 'block';
+    const j = await api('/api/favoritos?tabla=' + enc(state.currentTable));
+    if (!j.favoritos.length) {
+      list.innerHTML = '<div class="combo-empty">Aun no hay combinaciones guardadas para esta tabla.</div>';
+      return;
     }
-    sel.disabled = false;
+    list.innerHTML = j.favoritos.map((f) => `
+      <div class="fav">
+        <div class="fav-main">
+          <button class="fav-apply" type="button" data-id="${f.id}" data-cols="${esc(JSON.stringify(f.columnas))}" title="Usar esta combinacion">${IC.star} ${esc(f.nombre)}</button>
+          <button class="fav-del" type="button" data-id="${f.id}" title="Borrar favorito">&times;</button>
+        </div>
+        <div class="fav-micro">Tablas: ${esc(f.tablas.join(', '))}</div>
+      </div>`).join('');
   } catch (e) {
-    sel.innerHTML = `<option value="">${esc(e.message)}</option>`;
+    list.innerHTML = `<div class="combo-empty">${esc(e.message)}</div>`;
   }
 }
 
-$('tablaCargar').addEventListener('change', cargarColumnas);
+$('favList').addEventListener('click', async (e) => {
+  const del = e.target.closest('.fav-del');
+  if (del) {
+    if (!confirm('Borrar este favorito?')) return;
+    try {
+      await api('/api/favoritos/' + del.dataset.id, { method: 'DELETE' });
+      renderFavs();
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  const ap = e.target.closest('.fav-apply');
+  if (ap) {
+    try {
+      const cols = JSON.parse(ap.dataset.cols);
+      state.chips = cols.filter((c) => state.colMeta.some((m) => impName(m.nombre, c)));
+      renderChips();
+      $('recoBox').hidden = true;
+    } catch (_) {}
+  }
+});
+
+$('btnSaveFav').addEventListener('click', openFavModal);
+
+function openFavModal() {
+  if (!state.currentTable) { alert('Primero elige la tabla destino.'); return; }
+  if (!state.chips.length) { alert('Selecciona al menos una columna clave.'); return; }
+  $('favNombre').value = 'Combinacion: ' + state.chips.join(' + ');
+  $('favColsPreview').textContent = state.chips.join(' + ');
+  $('favTablas').innerHTML = state.tablas.map((t) => `
+    <label><input type="checkbox" value="${esc(t.tabla)}"${t.tabla === state.currentTable ? ' checked' : ''}> ${esc(t.tabla)}</label>`).join('');
+  $('overlayFav').hidden = false;
+  $('favNombre').focus();
+}
+
+$('btnFavCancel').addEventListener('click', () => { $('overlayFav').hidden = true; });
+
+$('btnFavOk').addEventListener('click', async () => {
+  const nombre = $('favNombre').value.trim();
+  const tablas = [...$('favTablas').querySelectorAll('input:checked')].map((i) => i.value);
+  if (!nombre) { alert('Escribe un nombre para el favorito.'); return; }
+  if (!tablas.length) { alert('Marca al menos una tabla.'); return; }
+  try {
+    await api('/api/favoritos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, columnas: state.chips, tablas }),
+    });
+    $('overlayFav').hidden = true;
+    renderFavs();
+  } catch (e) { alert(e.message); }
+});
+
+/* ── Visibilidad de tablas (letras chiquitas) ──────────── */
+function openVis() {
+  renderVis();
+  $('overlayVis').hidden = false;
+}
+
+function renderVis() {
+  const list = $('visList');
+  const nVis = state.tablas.filter((t) => t.visible).length;
+  $('visCount').textContent = `${nVis} de ${state.tablas.length} visibles`;
+  list.innerHTML = state.tablas.map((t) => `
+    <label><input type="checkbox" data-tabla="${esc(t.tabla)}"${t.visible ? ' checked' : ''}> ${esc(t.tabla)}</label>`).join('');
+}
+
+$('visList').addEventListener('change', async (e) => {
+  const cb = e.target.closest('input[data-tabla]');
+  if (!cb) return;
+  const tabla = cb.dataset.tabla;
+  const visible = cb.checked;
+  const t = state.tablas.find((x) => x.tabla === tabla);
+  if (t) t.visible = visible;
+  renderVis();
+  comboCar.render();
+  comboExp.render();
+  if (!visible) {
+      if (state.currentTable === tabla) onTableSelected('');
+      if (state.expTable === tabla) { state.expTable = ''; comboExp.setValue(''); }
+      if (!state.expTable) calpRangoExpOcultar();
+    }
+  try { await api('/api/tablas/visibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla, visible }) }); } catch (_) {}
+});
+
+$('btnVisAll').addEventListener('click', () => setAllVis(true));
+$('btnVisNone').addEventListener('click', () => setAllVis(false));
+
+async function setAllVis(visible) {
+  state.tablas.forEach((t) => { t.visible = visible; });
+  renderVis();
+  comboCar.render();
+  comboExp.render();
+  if (!visible) { onTableSelected(''); state.expTable = ''; comboExp.setValue(''); calpRangoExpOcultar(); }
+  comboCar.close();
+  for (const t of state.tablas) {
+    try { await api('/api/tablas/visibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: t.tabla, visible }) }); } catch (_) {}
+  }
+}
+
+$('btnVisClose').addEventListener('click', () => { $('overlayVis').hidden = true; });
+$('overlayFav').addEventListener('click', (e) => { if (e.target === $('overlayFav')) $('overlayFav').hidden = true; });
+$('overlayVis').addEventListener('click', (e) => { if (e.target === $('overlayVis')) $('overlayVis').hidden = true; });
 
 /* ── Drag & Drop ───────────────────────────────────────── */
 const dropZone = $('dropZone');
 const fileInput = $('archivo');
+let selectedFile = null;
 
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
@@ -218,8 +862,8 @@ function setFile(f) {
   $('fileSize').textContent = `(${(f.size / 1024 / 1024).toFixed(2)} MB)`;
   $('fileInfo').style.display = 'flex';
   dropZone.style.display = 'none';
-  $('btnCargar').disabled = false;
   $('resultCargar').style.display = 'none';
+  refreshBtn();
 }
 
 $('fileRemove').addEventListener('click', () => {
@@ -227,20 +871,17 @@ $('fileRemove').addEventListener('click', () => {
   fileInput.value = '';
   $('fileInfo').style.display = 'none';
   dropZone.style.display = '';
-  $('btnCargar').disabled = true;
   $('resultCargar').style.display = 'none';
+  refreshBtn();
 });
 
-/* ── Cargar datos ──────────────────────────────────────── */
+/* ── Cargar datos (SSE) ────────────────────────────────── */
 $('btnCargar').addEventListener('click', async () => {
   const box = $('resultCargar');
-  const tabla = $('tablaCargar').value;
-  const clave = $('claveCargar').value;
   box.style.display = 'none';
-
   if (!selectedFile) { alert('Selecciona un archivo.'); return; }
-  if (!tabla) { alert('Selecciona una tabla destino.'); return; }
-  if (!clave) { alert('Selecciona la columna clave.'); return; }
+  if (!state.currentTable) { alert('Selecciona una tabla destino.'); return; }
+  if (!state.chips.length) { alert('Selecciona al menos una columna clave (o usa la recomendada).'); return; }
 
   $('btnCargar').disabled = true;
   $('btnCargar').innerHTML = '<span class="spinner"></span>Cargando...';
@@ -252,8 +893,8 @@ $('btnCargar').addEventListener('click', async () => {
 
   const fd = new FormData();
   fd.append('archivo', selectedFile);
-  fd.append('tabla', tabla);
-  fd.append('clave', clave);
+  fd.append('tabla', state.currentTable);
+  fd.append('clave', JSON.stringify(state.chips));
 
   try {
     const resp = await fetch('/api/cargar', { method: 'POST', body: fd });
@@ -276,36 +917,33 @@ $('btnCargar').addEventListener('click', async () => {
           if (line.startsWith('data: ')) data = line.slice(6);
         }
         if (!data) continue;
-        const parsed = JSON.parse(data);
-
+        const d = JSON.parse(data);
         if (eventType === 'progress') {
-          $('progressFill').style.width = parsed.pct + '%';
-          $('progressPct').textContent = parsed.pct + '%';
-          $('progressMsg').textContent = parsed.msg;
+          $('progressFill').style.width = d.pct + '%';
+          $('progressPct').textContent = d.pct + '%';
+          $('progressMsg').textContent = d.msg || '';
+          if (d.pct >= 100) $('progressFill').classList.add('done');
         } else if (eventType === 'done') {
           $('progressFill').style.width = '100%';
-          $('progressFill').className = 'progress-fill done';
           $('progressPct').textContent = '100%';
+          $('progressFill').classList.add('done');
           $('progressMsg').textContent = 'Carga completa.';
-          showResult(parsed);
+          showResult(d);
         } else if (eventType === 'error') {
-          $('progressFill').className = 'progress-fill error';
-          $('progressMsg').textContent = 'Error.';
-          box.className = 'result err';
-          box.innerHTML = `<h3>Error</h3><p>${esc(parsed.message)}</p>`;
-          box.style.display = 'block';
+          $('progressFill').classList.add('error');
+          $('progressMsg').textContent = d.message || 'Error';
+          showError(d.message || 'Error desconocido');
         }
       }
     }
   } catch (e) {
-    $('progressFill').className = 'progress-fill error';
-    $('progressMsg').textContent = 'Error de conexion.';
-    box.className = 'result err';
-    box.innerHTML = `<h3>Error</h3><p>${esc(e.message)}</p>`;
-    box.style.display = 'block';
+    $('progressFill').classList.add('error');
+    $('progressMsg').textContent = e.message;
+    showError(e.message);
   } finally {
     $('btnCargar').disabled = false;
     $('btnCargar').innerHTML = 'Cargar datos';
+    refreshBtn();
   }
 });
 
@@ -313,33 +951,43 @@ function showResult(d) {
   const box = $('resultCargar');
   box.className = 'result ok';
   const warn = d.advertencia
-    ? `<div class="warn-box">&#9888; ${esc(d.advertencia)}</div>`
+    ? `<div class="warn-box">${IC.warn} ${esc(d.advertencia)}</div>`
     : '';
   box.innerHTML = `
     <h3>Carga completa</h3>
     ${warn}
     <div class="small">Archivo: <b>${esc(d.archivo)}</b> | Tabla: <b>${esc(d.tabla)}</b> | Clave: <b>${esc(d.clave)}</b></div>
     <div class="stats">
-      <div class="stat blue"><div class="num">${d.totalFilas.toLocaleString()}</div><div class="lbl">Filas en archivo</div></div>
-      <div class="stat green"><div class="num">${d.insertados.toLocaleString()}</div><div class="lbl">Nuevas (INSERT)</div></div>
-      <div class="stat green"><div class="num">${d.actualizados.toLocaleString()}</div><div class="lbl">Actualizadas (UPDATE)</div></div>
-      <div class="stat red"><div class="num">${d.errores.toLocaleString()}</div><div class="lbl">Errores</div></div>
-      <div class="stat gray"><div class="num">${d.duplicadas.toLocaleString()}</div><div class="lbl">Duplicadas en archivo</div></div>
-      <div class="stat gray"><div class="num">${d.omitidas.toLocaleString()}</div><div class="lbl">Sin clave</div></div>
+      <div class="stat blue"><div class="num">${Number(d.totalFilas).toLocaleString()}</div><div class="lbl">Filas en archivo</div></div>
+      <div class="stat green"><div class="num">${Number(d.insertados).toLocaleString()}</div><div class="lbl">Nuevas (INSERT)</div></div>
+      <div class="stat green"><div class="num">${Number(d.actualizados).toLocaleString()}</div><div class="lbl">Actualizadas (UPDATE)</div></div>
+      <div class="stat red"><div class="num">${Number(d.errores).toLocaleString()}</div><div class="lbl">Errores</div></div>
+      <div class="stat gray"><div class="num">${Number(d.duplicadas).toLocaleString()}</div><div class="lbl">Duplicadas en archivo</div></div>
+      <div class="stat gray"><div class="num">${Number(d.omitidas).toLocaleString()}</div><div class="lbl">Sin clave</div></div>
     </div>`;
+  box.style.display = 'block';
+}
+
+function showError(msg) {
+  const box = $('resultCargar');
+  box.className = 'result err';
+  box.innerHTML = `<h3>Error en la carga</h3><div>${esc(msg)}</div>`;
   box.style.display = 'block';
 }
 
 /* ── Exportar ──────────────────────────────────────────── */
 $('btnVista').addEventListener('click', async () => {
   const box = $('resultadoExp');
-  const t = $('tablaExp').value;
+  const t = state.expTable;
   box.innerHTML = '';
   if (!t) { box.innerHTML = '<div class="result err" style="display:block">Elige la tabla primero.</div>'; return; }
+  const fstr = expFstr();
+  const qf = fstr ? '&f=' + enc(fstr) : '';
   $('btnVista').disabled = true;
   try {
-    const j = await api('/api/vista?tabla=' + encodeURIComponent(t));
-    let html = `<div class="result ok" style="display:block"><b>${j.total.toLocaleString()}</b> filas en total. Primeras ${j.filas.length}:</div>`;
+    const j = await api('/api/vista?tabla=' + enc(t) + qf);
+    const etiqueta = expTienePeriodo() && fstr ? 'en el periodo seleccionado' : 'en total';
+    let html = `<div class="result ok" style="display:block"><b>${Number(j.total).toLocaleString()}</b> filas ${etiqueta}. Primeras ${j.filas.length}:</div>`;
     html += '<div class="preview-wrap"><table class="data"><tr>' +
       j.columnas.map((c) => `<th>${esc(c)}</th>`).join('') + '</tr>';
     for (const f of j.filas) {
@@ -363,37 +1011,744 @@ $('btnVista').addEventListener('click', async () => {
 
 $('btnExp').addEventListener('click', async () => {
   const box = $('resultadoExp');
-  const t = $('tablaExp').value;
+  const t = state.expTable;
   box.innerHTML = '';
-  if (!t) { box.innerHTML = '<div class="result err" style="display:block">Elige la tabla a exportar.</div>'; return; }
+  if (!t) { box.innerHTML = '<div class="result err" style="display:block">Elige la tabla primero.</div>'; return; }
+  const fstr = expFstr();
+  const qf = fstr ? '&f=' + enc(fstr) : '';
+  const enPeriodo = expTienePeriodo() && fstr;
   $('btnExp').disabled = true;
+  $('btnExp').innerHTML = '<span class="spinner"></span>Generando Excel...';
   try {
-    const j = await api('/api/vista?tabla=' + encodeURIComponent(t));
-    if (j.total > 50000) {
-      if (!confirm(`Esta tabla tiene ${j.total.toLocaleString()} filas. Puede tardar 1-3 minutos. Continuar?`)) {
-        box.innerHTML = '<div class="result" style="display:block">Exportacion cancelada.</div>';
-        return;
-      }
+    const r = await fetch('/api/exportar?tabla=' + enc(t) + qf);
+    if (!r.ok) {
+      let msg = 'Error al exportar.';
+      try { const j = await r.json(); msg = j.error || msg; } catch (_) {}
+      throw new Error(msg);
     }
-    box.innerHTML = `<div class="result" style="display:block">Generando Excel de ${j.total.toLocaleString()} filas...</div>`;
-    const resp = await fetch('/api/exportar?tabla=' + encodeURIComponent(t));
-    if (!resp.ok) { const e = await resp.json().catch(() => null); throw new Error((e && e.error) || 'Error al exportar'); }
-    const exportadas = Number(resp.headers.get('X-Exportadas')) || 0;
-    const blob = await resp.blob();
+    const blob = await r.blob();
+    const total = r.headers.get('X-Total-Filas') || '?';
+    const exportadas = r.headers.get('X-Exportadas') || '?';
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = t.split('.').pop() + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    const nombre = (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
-    box.innerHTML = `<div class="result ok" style="display:block"><b>Exportado:</b> ${esc(t)} (${exportadas.toLocaleString()} filas)</div>`;
+    a.remove();
+    URL.revokeObjectURL(url);
+    box.innerHTML = `<div class="result ok" style="display:block"><b>${exportadas}</b> filas exportadas a <b>${esc(nombre)}</b> (${enPeriodo ? 'total del periodo' : 'total en tabla'}: ${Number(total).toLocaleString()}).</div>`;
   } catch (e) {
     box.innerHTML = `<div class="result err" style="display:block">${esc(e.message)}</div>`;
   } finally {
     $('btnExp').disabled = false;
+    $('btnExp').innerHTML = 'Exportar tabla completa';
   }
 });
 
-cargarTablas();
+/* ── Carga por periodo (mes) ───────────────────────────── */
+const mesState = {
+  tabla: '', meta: [], sugeridos: [], valores: {},
+  filtros: [],
+  count: null, archivo: null,
+};
+let mesDebounce = null;
+
+function onMesTable(tabla) {
+  mesState.tabla = tabla;
+  mesState.meta = []; mesState.sugeridos = []; mesState.valores = {};
+  mesState.filtros = [];
+  mesState.count = null; mesState.archivo = null;
+  clearMesFile();
+  hideMesResult();
+  $('calRango').hidden = true;
+  if (!tabla) { $('periodoSel').hidden = true; renderMesResumen(); return; }
+  api('/api/filtros?tabla=' + enc(tabla)).then((j) => {
+    if (mesState.tabla !== tabla) return;
+    mesState.meta = j.columnas;
+    mesState.sugeridos = j.sugeridos;
+    mesState.valores = j.valores || {};
+    mesState.filtros = [];
+    if (esNominal()) { $('periodoSel').hidden = false; poblarPeriodo(); buildFiltrosPeriodo(); }
+    else { $('periodoSel').hidden = true; renderMesResumen(); mesCount(); }
+  }).catch(() => {
+    mesState.filtros = [];
+    $('periodoSel').hidden = true;
+    renderMesResumen();
+  });
+}
+
+function esNominal() { return /nominal[\s_]?trama/i.test(mesState.tabla || ''); }
+
+function aniosDisponibles() {
+  const cur = new Date().getFullYear();
+  const out = [];
+  for (let y = cur; y >= Math.max(2020, cur - 6); y--) out.push(y);
+  return out;
+}
+
+function poblarPeriodo() {
+  const hoy = new Date();
+  const curY = hoy.getFullYear();
+  const curM = hoy.getMonth() + 1;
+  const selAnio = $('selAnio');
+  const selMes = $('selMes');
+  selAnio.innerHTML = aniosDisponibles().map((y) => `<option value="${y}">${y}</option>`).join('');
+  selAnio.value = String(curY);
+  selMes.innerHTML = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+  selMes.value = String(curM);
+  actualizarMeses();
+}
+
+function actualizarMeses() {
+  const hoy = new Date();
+  const curY = hoy.getFullYear();
+  const curM = hoy.getMonth() + 1;
+  const a = Number($('selAnio').value);
+  const selMes = $('selMes');
+  Array.from(selMes.options).forEach((o) => {
+    o.disabled = a === curY && Number(o.value) > curM;
+  });
+  const sel = selMes.selectedOptions[0];
+  if (sel && sel.disabled) selMes.value = String(curM);
+}
+
+function buildFiltrosPeriodo() {
+  if (!esNominal()) { mesState.filtros = []; renderMesResumen(); return; }
+  const meta = mesState.meta || [];
+  const findCol = (re) => { const c = meta.find((x) => re.test(x.nombre)); return c ? c.nombre : null; };
+  const nomMes = findCol(/^(mes|mesl)$/i) || 'Mes';
+  const nomAnio = findCol(/^(anio|año)$/i) || 'Anio';
+  mesState.filtros = [
+    { columna: nomMes, valor: String($('selMes').value) },
+    { columna: nomAnio, valor: String($('selAnio').value) },
+  ];
+  mesState.count = null;
+  renderMesResumen();
+  mesCount();
+}
+
+function onPeriodoChange() {
+  actualizarMeses();
+  buildFiltrosPeriodo();
+}
+
+$('selMes').addEventListener('change', onPeriodoChange);
+$('selAnio').addEventListener('change', onPeriodoChange);
+$('calLimpiaPeriodo').addEventListener('click', () => { poblarPeriodo(); buildFiltrosPeriodo(); });
+
+/* ── Rango del periodo con calendario (carga y exportacion) ── */
+const NOM_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const NOM_MES_C = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const calP = { vista: 'dias', m: null, a: null };
+const expState = { meta: [], filtros: [] };
+let calpModo = 'carga';
+
+const calpEstado = () => (calpModo === 'exp' ? expState : mesState);
+
+function calpDetect() {
+  const meta = calpEstado().meta || [];
+  const find = (re) => { const c = meta.find((x) => re.test(x.nombre)); return c ? c.nombre : null; };
+  return { d: find(/^dia$/i), m: find(/^(mes|mesl)$/i), a: find(/^(anio|año)$/i) };
+}
+
+function calpMapear() {
+  const c = calpDetect();
+  const row = (n) => (n ? calpEstado().filtros.find((f) => impName(f.columna, n)) : null);
+  return {
+    d: row(c.d), m: row(c.m), a: row(c.a),
+    nombres: c,
+    tieneDia: !!c.d, tieneMes: !!c.m, tieneAnio: !!c.a,
+  };
+}
+
+function calpFila(nombre) {
+  if (!nombre) return null;
+  const est = calpEstado();
+  let f = est.filtros.find((x) => impName(x.columna, nombre));
+  if (f) return f;
+  const nf = { columna: nombre, valor: '' };
+  est.filtros.push(nf);
+  return nf;
+}
+
+const calpR = { from: null, to: null };
+let calpObjetivo = 'desde';
+let calpAbierto = false;
+let calpToque = 0;
+
+const calpFmt = (d) => (d ? d.getDate() + ' ' + NOM_MES_C[d.getMonth()] + ' ' + d.getFullYear() : '');
+
+function calpLimpiaRows() {
+  const mm = calpMapear();
+  [mm.nombres.d, mm.nombres.m, mm.nombres.a].forEach((n) => {
+    if (!n) return;
+    const f = calpEstado().filtros.find((x) => impName(x.columna, n));
+    if (f) { f.valor = ''; delete f.desde; delete f.hasta; }
+  });
+}
+
+function calpTerminar() {
+  if (calpModo === 'exp') { renderExpRango(); }
+  else { renderMesResumen(); mesCount(); }
+}
+
+function calpAplicar() {
+  const mm = calpMapear();
+  calpLimpiaRows();
+  const F = calpR.from, T = calpR.to;
+  if (!F && !T) { calpTerminar(); renderCalPeriodo(true); return; }
+  const f = F || T, t = T || F;
+  if (f.getFullYear() !== t.getFullYear() || f.getMonth() !== t.getMonth()) {
+    alert('El rango debe estar dentro de un mismo mes (ej: 01-08 a 31-08 de 2026). Elige nuevamente.');
+    return;
+  }
+  if (mm.tieneMes) { const x = calpFila(mm.nombres.m); if (x) x.valor = String(f.getMonth() + 1); }
+  if (mm.tieneAnio) { const x = calpFila(mm.nombres.a); if (x) x.valor = String(f.getFullYear()); }
+  if (mm.tieneDia) {
+    const dim = new Date(f.getFullYear(), f.getMonth() + 1, 0).getDate();
+    const d1 = f.getDate(), d2 = t.getDate();
+    if (d1 === 1 && d2 === dim) {
+      const x = calpFila(mm.nombres.d);
+      if (x) { x.valor = ''; delete x.desde; delete x.hasta; }
+    } else if (d1 === d2) {
+      const x = calpFila(mm.nombres.d);
+      if (x) { x.valor = String(d1); delete x.desde; delete x.hasta; }
+    } else {
+      const x = calpFila(mm.nombres.d);
+      if (x) { x.valor = ''; x.desde = String(Math.min(d1, d2)); x.hasta = String(Math.max(d1, d2)); }
+    }
+  }
+  calpTerminar(); renderCalPeriodo(true);
+}
+
+function calpRangoLimpiar() {
+  calpR.from = null; calpR.to = null;
+  calpLimpiaRows();
+  calpTerminar(); renderCalPeriodo(true);
+}
+
+function pintarTriggers() {
+  const par = (idTrig, idTxt, desde) => {
+    const tg = $(idTrig);
+    if (!tg) return;
+    const f = desde ? calpR.from : calpR.to;
+    $(idTxt).textContent = f ? calpFmt(f) : (desde ? 'Desde (fecha de inicio)' : 'Hasta (fecha final)');
+    tg.classList.toggle('set', !!f);
+  };
+  if (calpModo === 'exp') { par('expCalDesde', 'expTxtDesde', true); par('expCalHasta', 'expTxtHasta', false); }
+  else { par('calTriggerDesde', 'calTxtDesde', true); par('calTriggerHasta', 'calTxtHasta', false); }
+}
+
+function renderCalPeriodo(silencioso) {
+  const box = $('calPop');
+  if (!box) return;
+  const mm = calpMapear();
+  if (!mm.tieneDia && !mm.tieneMes && !mm.tieneAnio) { box.style.display = 'none'; calpAbierto = false; return; }
+
+  const now = new Date();
+  if (calP.vista === 'dias' && !mm.tieneDia) calP.vista = mm.tieneMes ? 'meses' : 'anios';
+  if (!mm.tieneMes && calP.vista === 'meses') calP.vista = mm.tieneDia ? 'dias' : 'anios';
+  if (!mm.tieneAnio && calP.vista === 'anios') calP.vista = mm.tieneDia ? 'dias' : 'meses';
+
+  const ancla = calpObjetivo === 'hasta' && calpR.from ? calpR.from : (calpR.from || calpR.to || now);
+  if (calP.m == null) { calP.m = ancla.getMonth() + 1; calP.a = ancla.getFullYear(); }
+  else if (calpObjetivo === 'hasta' && calpR.from) { calP.m = calpR.from.getMonth() + 1; calP.a = calpR.from.getFullYear(); }
+
+  const labelMes = NOM_MES[calP.m - 1];
+  const hoy = now.getDate();
+  const titulo = (calpObjetivo === 'hasta' && calpR.from ? 'Hasta (final)' : calpObjetivo === 'hasta' ? 'Hasta (fecha final)' : 'Desde (fecha de inicio)');
+
+  const d1 = calpR.from && calP.a === calpR.from.getFullYear() && calP.m === calpR.from.getMonth() + 1 ? calpR.from.getDate() : null;
+  const d2 = calpR.to && calP.a === calpR.to.getFullYear() && calP.m === calpR.to.getMonth() + 1 ? calpR.to.getDate() : null;
+  const lo = d1 !== null && d2 !== null ? Math.min(d1, d2) : null;
+  const hi = d1 !== null && d2 !== null ? Math.max(d1, d2) : null;
+
+  let html = '<div class="calp-head"><div class="calp-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> ' + esc(titulo) + '</div>';
+  html += '<div class="calp-btns">';
+  if (calP.vista === 'dias') {
+    if (mm.tieneMes) html += `<button type="button" class="calp-nav" data-cal-nav="mes" data-mnav="-1" title="Mes anterior">&#9664;</button>` +
+      `<button type="button" class="calp-month" data-caltitle="mes" title="Cambiar mes">${labelMes}</button>` +
+      `<button type="button" class="calp-nav" data-cal-nav="mes" data-mnav="1" title="Mes siguiente">&#9654;</button>`;
+    else html += `<span class="calp-pill" title="Mes" style="color:#64748b;cursor:default">${labelMes}</span>`;
+    if (mm.tieneAnio) html += `<button type="button" class="calp-pill" data-caltitle="anio" title="Cambiar año">${calP.a}</button>`;
+  } else if (calP.vista === 'meses') {
+    if (mm.tieneAnio) html += `<button type="button" class="calp-pill" data-caltitle="anio" title="Cambiar año">${calP.a}</button>`;
+  } else {
+    html += '<b style="color:#4f46e5">Selecciona un año</b>';
+  }
+  html += '</div></div>';
+
+  html += '<div class="calp-toolbar">' +
+    `<button type="button" class="calp-tool primary" data-calhoy="1">Hoy</button>` +
+    (mm.tieneDia ? `<button type="button" class="calp-tool" data-calmesc="1">Todo el mes</button>` : '') +
+    '<button type="button" class="calp-tool" data-callimpia="1">Limpiar</button>' +
+    '</div>';
+
+  if (calP.vista === 'dias') {
+    const dim = new Date(calP.a, calP.m, 0).getDate();
+    const first = new Date(calP.a, calP.m - 1, 1).getDay();
+    html += '<div class="calp-grid">' + ['Do','Lu','Ma','Mi','Ju','Vi','Sa'].map((d) => `<div class="calp-dow">${d}</div>`).join('');
+    html += Array.from({ length: first }, () => '<div></div>').join('');
+    for (let k = 1; k <= dim; k++) {
+      const esHoy = calP.a === now.getFullYear() && calP.m === now.getMonth() + 1 && k === hoy;
+      const esFuturo = calP.a > now.getFullYear() ||
+        (calP.a === now.getFullYear() && calP.m > now.getMonth() + 1) ||
+        (calP.a === now.getFullYear() && calP.m === now.getMonth() + 1 && k > hoy);
+      const borde = (k === d1 && k === d2) || (lo !== null && (k === lo || k === hi)) || (d1 !== null && d2 === null && k === d1) || (d2 !== null && d1 === null && k === d2);
+      const inter = lo !== null && hi !== null && k > lo && k < hi;
+      html += `<button type="button" class="calp-day${esHoy ? ' today' : ''}${esFuturo ? ' off' : ''}${borde ? ' sel' : ''}${inter ? ' enrango' : ''}" data-caldia="${k}">${k}</button>`;
+    }
+    html += '</div>';
+  } else if (calP.vista === 'meses') {
+    html += '<div class="calp-grid meses">' + NOM_MES_C.map((n, mi) => {
+      const esFuturo = calP.a > now.getFullYear() || (calP.a === now.getFullYear() && mi + 1 > now.getMonth() + 1);
+      return `<button type="button" class="calp-cell${esFuturo ? ' off' : ''}" data-calmes-el="${mi + 1}">${n}</button>`;
+    }).join('') + '</div>';
+  } else {
+    const base = Math.floor((calP.a - 1) / 12) * 12 + 1;
+    html += '<div class="calp-grid anios">' + Array.from({ length: 12 }, (_, k) => {
+      const y = base + k;
+      const sel = calpR.from && y === calpR.from.getFullYear();
+      return `<button type="button" class="calp-cell${y > now.getFullYear() ? ' off' : ''}${sel ? ' sel' : ''}" data-calanio-el="${y}">${y}</button>`;
+    }).join('') + '</div>';
+    html += '<div class="calp-toolbar" style="margin-top:8px;justify-content:center">' +
+      `<button type="button" class="calp-tool" data-caldeca="-1">&#9664;</button><button type="button" class="calp-tool" data-caldeca="1">&#9654;</button></div>`;
+  }
+
+  const rangoTxt = (() => {
+    if (calpR.from && calpR.to) {
+      const f = calpFmt(calpR.from), t = calpFmt(calpR.to);
+      return f === t ? f : f + ' – ' + t;
+    }
+    return calpR.from ? calpFmt(calpR.from) : (calpR.to ? calpFmt(calpR.to) : '');
+  })();
+  html += `<div class="calp-seleccion"${rangoTxt ? '' : ' hidden'}>` +
+    `<span>Periodo: <b>${esc(rangoTxt)}</b></span>` +
+    `<button type="button" class="limpia" data-callimpia="1">Limpiar</button></div>`;
+
+  if (calP.vista !== 'dias') {
+    html += `<div class="calp-yearrow"><input type="number" class="calp-yeargo" min="1900" max="9999" placeholder="Ir al año (ej: ${now.getFullYear()})" /><button type="button" class="calp-tool" data-cal-yaño="1">Ir</button><button type="button" class="calp-tool" data-cal-hoy-año="1">Este año</button></div>`;
+  }
+
+  box.innerHTML = html;
+  pintarTriggers();
+  if (!silencioso) return;
+}
+
+function calpElegirDia(d) {
+  const fecha = new Date(calP.a, calP.m - 1, d);
+  const hoyLim = new Date();
+  hoyLim.setHours(0, 0, 0, 0);
+  if (fecha > hoyLim) { alert('No se permiten fechas posteriores a hoy (hoy: ' + calpFmt(hoyLim) + ').'); return; }
+  if (calpObjetivo === 'hasta' && calpR.from) {
+    if (fecha.getFullYear() !== calpR.from.getFullYear() || fecha.getMonth() !== calpR.from.getMonth()) {
+      alert('El rango debe estar dentro del mismo mes de la fecha de inicio.');
+      return;
+    }
+    calpR.to = fecha < calpR.from ? new Date(calpR.from) : fecha;
+  } else {
+    calpR.from = fecha;
+  }
+  calpAplicar();
+  calpCerrar();
+}
+
+function calpAbrir(objetivo, trig) {
+  calpObjetivo = objetivo || 'desde';
+  calpModo = trig && trig.dataset.calmodo ? trig.dataset.calmodo : 'carga';
+  renderCalPeriodo(true);
+  const box = $('calPop');
+  const r = trig.getBoundingClientRect();
+  box.style.display = 'block';
+  box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 336)) + 'px';
+  box.style.top = (r.bottom + 6) + 'px';
+  calpAbierto = true;
+}
+
+function calpCerrar() {
+  const box = $('calPop');
+  if (box) box.style.display = 'none';
+  calpAbierto = false;
+}
+
+function calpIrAAnio() {
+  const inp = $('calPop').querySelector('.calp-yeargo');
+  if (!inp) return;
+  const n = Number(String(inp.value).trim());
+  const ahora = new Date();
+  if (!Number.isFinite(n) || n < 1900 || n > 9999) { alert('Escribe un año valido (ej: ' + ahora.getFullYear() + ').'); return; }
+  if (n > ahora.getFullYear()) { alert('No se permiten años posteriores a ' + ahora.getFullYear() + '.'); return; }
+  const mm = calpMapear();
+  calP.a = n;
+  calP.vista = mm.tieneDia ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
+  renderCalPeriodo(true);
+}
+
+$('calTriggerDesde').addEventListener('click', () => {
+  if (calpAbierto && calpObjetivo === 'desde' && calpModo === 'carga') { calpCerrar(); return; }
+  calpAbrir('desde', $('calTriggerDesde'));
+});
+$('calTriggerHasta').addEventListener('click', () => {
+  if (calpAbierto && calpObjetivo === 'hasta' && calpModo === 'carga') { calpCerrar(); return; }
+  calpAbrir('hasta', $('calTriggerHasta'));
+});
+$('calLimpiaRango').addEventListener('click', () => { calpModo = 'carga'; calpRangoLimpiar(); });
+$('expCalDesde').addEventListener('click', () => {
+  if (calpAbierto && calpObjetivo === 'desde' && calpModo === 'exp') { calpCerrar(); return; }
+  calpAbrir('desde', $('expCalDesde'));
+});
+$('expCalHasta').addEventListener('click', () => {
+  if (calpAbierto && calpObjetivo === 'hasta' && calpModo === 'exp') { calpCerrar(); return; }
+  calpAbrir('hasta', $('expCalHasta'));
+});
+$('expCalLimpia').addEventListener('click', () => { calpModo = 'exp'; calpRangoLimpiar(); });
+
+$('calPop').addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.classList.contains('off')) return;
+  calpToque = Date.now();
+  if (t.dataset.caldia !== undefined) { calpElegirDia(Number(t.dataset.caldia)); return; }
+  if (t.dataset.calmesEl !== undefined) {
+    const nm = Number(t.dataset.calmesEl);
+    const mm = calpMapear();
+    if (mm.tieneDia) { calP.m = nm; calP.vista = 'dias'; renderCalPeriodo(true); return; }
+    const ahora = new Date();
+    const f = new Date(calP.a, nm - 1, 1);
+    calpR.from = f;
+    let tEnd = new Date(calP.a, nm, 0);
+    const hoyLim = new Date(); hoyLim.setHours(0, 0, 0, 0);
+    if (calpR.from > hoyLim) { alert('No se permiten fechas posteriores a hoy.'); calpCerrar(); return; }
+    if (tEnd > hoyLim) tEnd = hoyLim;
+    calpR.to = tEnd;
+    calpAplicar(); calpCerrar();
+    return;
+  }
+  if (t.dataset.calanioEl !== undefined) {
+    const na = Number(t.dataset.calanioEl);
+    const mm = calpMapear();
+    calP.a = na;
+    calP.vista = mm.tieneDia ? 'dias' : 'meses';
+    renderCalPeriodo(true);
+    return;
+  }
+  if (t.dataset.calNav === 'mes') {
+    let nm = calP.m + Number(t.dataset.mnav), na = calP.a;
+    if (nm < 1) { nm = 12; na--; }
+    if (nm > 12) { nm = 1; na++; }
+    calP.m = nm; calP.a = na;
+    renderCalPeriodo(true);
+    return;
+  }
+  if (t.dataset.caltitle === 'mes') { calP.vista = 'meses'; renderCalPeriodo(true); return; }
+  if (t.dataset.caltitle === 'anio') { calP.vista = 'anios'; renderCalPeriodo(true); return; }
+  if (t.dataset.calhoy !== undefined) {
+    const n = new Date();
+    calpR.from = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    calpR.to = new Date(calpR.from);
+    calpAplicar(); calpCerrar();
+    return;
+  }
+  if (t.dataset.calmesc !== undefined) {
+    const f = calpR.from || new Date(calP.a, calP.m - 1, 1);
+    const ahora = new Date();
+    const hoyLim = new Date(); hoyLim.setHours(0, 0, 0, 0);
+    if (f > hoyLim) { calpCerrar(); return; }
+    calpR.from = new Date(f.getFullYear(), f.getMonth(), 1);
+    let tEnd = new Date(f.getFullYear(), f.getMonth() + 1, 0);
+    if (tEnd > hoyLim) tEnd = hoyLim;
+    calpR.to = tEnd;
+    calpAplicar(); calpCerrar();
+    return;
+  }
+  if (t.dataset.caldeca !== undefined) { calP.a += 12 * Number(t.dataset.caldeca); renderCalPeriodo(true); return; }
+  if (t.dataset.callimpia !== undefined) { calpRangoLimpiar(); return; }
+  if (t.dataset.calYaño !== undefined) { calpIrAAnio(); return; }
+  if (t.dataset.calHoyAño !== undefined) {
+    const mm = calpMapear();
+    calP.a = new Date().getFullYear();
+    calP.vista = mm.tieneDia ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
+    renderCalPeriodo(true);
+    return;
+  }
+});
+
+$('calPop').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('calp-yeargo')) {
+    e.preventDefault();
+    calpIrAAnio();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!calpAbierto) return;
+  if (Date.now() - calpToque < 350) return;
+  if (e.target.closest('#calPop') || e.target.closest('.calp-trigger') || e.target.closest('#calLimpiaRango') || e.target.closest('#expCalLimpia')) return;
+  calpCerrar();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && calpAbierto) calpCerrar(); });
+
+/* Periodo al exportar (solo tablas con columnas de periodo) */
+const tieneColPeriodo = (meta) => {
+  const m = meta || [];
+  return m.some((c) => /^(mes|mesl)$/i.test(c.nombre)) ||
+    m.some((c) => /^(anio|año)$/i.test(c.nombre)) ||
+    m.some((c) => /^dia$/i.test(c.nombre));
+};
+function expTienePeriodo() { return tieneColPeriodo(expState.meta); }
+
+function renderExpRango() {
+  const rg = $('calRangoExp');
+  const lbl = $('lblCalRangoExp');
+  if (!rg || !lbl) return;
+  const visible = !!state.expTable && expTienePeriodo();
+  rg.hidden = !visible;
+  lbl.hidden = !visible;
+}
+
+async function onExpTable(tabla) {
+  state.expTable = tabla;
+  expState.meta = [];
+  expState.filtros = [];
+  renderExpRango();
+  if (!tabla) return;
+  try {
+    const j = await api('/api/filtros?tabla=' + enc(tabla));
+    if (state.expTable !== tabla) return;
+    expState.meta = j.columnas || [];
+    expState.filtros = [];
+    renderExpRango();
+  } catch (_) { renderExpRango(); }
+}
+
+function calpRangoExpOcultar() {
+  expState.meta = [];
+  expState.filtros = [];
+  renderExpRango();
+}
+
+function expFstr() {
+  const activos = expState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+  return activos.map((f) => f.desde !== undefined
+    ? `${enc(f.columna)}:${enc(f.desde)}:${enc(f.hasta)}`
+    : `${enc(f.columna)}:${enc(f.valor)}`).join(',');
+}
+
+function mesCount() {
+  clearTimeout(mesDebounce);
+  mesDebounce = setTimeout(async () => {
+    if (!mesState.tabla) return;
+    const esN = esNominal();
+    const activos = mesState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+    if (esN && !activos.length) { renderMesResumen(); return; }
+    const fstr = activos.map((f) => f.desde !== undefined
+      ? `${enc(f.columna)}:${enc(f.desde)}:${enc(f.hasta)}`
+      : `${enc(f.columna)}:${enc(f.valor)}`).join(',');
+    const el = $('resumenCount');
+    el.innerHTML = '<span class="spinner"></span>Consultando filas existentes...';
+    try {
+      const j = await api('/api/filtros?tabla=' + enc(mesState.tabla) + (fstr ? '&f=' + fstr : ''));
+      if (mesState.tabla !== j.tabla) return;
+      mesState.count = (j.count != null ? j.count : j.totalFilas) || 0;
+      renderMesResumen();
+    } catch (_) { el.innerHTML = 'No se pudo consultar el recuento.'; }
+  }, 450);
+}
+
+function renderMesResumen() {
+  const box = $('resumenMes');
+  if (!mesState.tabla) { box.hidden = true; refreshMesBtn(); return; }
+  box.hidden = false;
+  if (esNominal()) {
+    const activos = mesState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+    $('resumenChips').innerHTML = activos.length
+      ? activos.map((f) => `<span class="fchip">${esc(f.columna)} = <b>${f.desde !== undefined ? esc(f.desde + ' - ' + f.hasta) : esc(f.valor)}</b></span>`).join('')
+      : '<span class="fchip">Sin filtro</span>';
+    const n = mesState.count;
+    $('resumenCount').innerHTML = (n === null || n === undefined)
+      ? 'Consultando filas existentes...'
+      : `<span class="recuento">${Number(n).toLocaleString()}</span> filas existentes que se reemplazaran con la carga.`;
+  } else {
+    $('resumenChips').innerHTML = '<span class="fchip">Toda la tabla</span>';
+    const n = mesState.count;
+    $('resumenCount').innerHTML = (n === null || n === undefined)
+      ? 'Consultando filas existentes...'
+      : `Se reemplazara <b>${Number(n).toLocaleString()}</b> filas existentes con el contenido del archivo.`;
+  }
+  refreshMesBtn();
+}
+
+/* Archivo del periodo */
+const dropZoneMes2 = $('dropZoneMes');
+const fileInputMes = $('archivoMes');
+dropZoneMes2.addEventListener('click', () => fileInputMes.click());
+dropZoneMes2.addEventListener('dragover', (e) => { e.preventDefault(); dropZoneMes2.classList.add('dragover'); });
+dropZoneMes2.addEventListener('dragleave', () => dropZoneMes2.classList.remove('dragover'));
+dropZoneMes2.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZoneMes2.classList.remove('dragover');
+  if (e.dataTransfer.files.length) setMesFile(e.dataTransfer.files[0]);
+});
+fileInputMes.addEventListener('change', () => { if (fileInputMes.files.length) setMesFile(fileInputMes.files[0]); });
+
+function setMesFile(f) {
+  const ext = f.name.split('.').pop().toLowerCase();
+  if (!['xlsx', 'xls', 'csv', 'zip'].includes(ext)) {
+    alert('Formato no soportado. Usa .xlsx, .xls, .csv o .zip');
+    return;
+  }
+  mesState.archivo = f;
+  $('fileNameMes').textContent = f.name;
+  $('fileSizeMes').textContent = `(${(f.size / 1024 / 1024).toFixed(2)} MB)`;
+  $('fileInfoMes').style.display = 'flex';
+  dropZoneMes2.style.display = 'none';
+  hideMesResult();
+  refreshMesBtn();
+}
+
+$('fileRemoveMes').addEventListener('click', clearMesFile);
+function clearMesFile() {
+  mesState.archivo = null;
+  fileInputMes.value = '';
+  $('fileInfoMes').style.display = 'none';
+  dropZoneMes2.style.display = '';
+  hideMesResult();
+  refreshMesBtn();
+}
+function hideMesResult() { $('resultMes').style.display = 'none'; }
+function refreshMesBtn() {
+  const esN = esNominal();
+  const activos = mesState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+  $('btnCargarMes').disabled = !mesState.tabla || !mesState.archivo || (esN && !activos.length);
+}
+
+/* Confirmacion y ejecucion */
+$('btnCargarMes').addEventListener('click', () => {
+  if (!mesState.archivo) { alert('Selecciona el archivo del periodo.'); return; }
+  const esN = esNominal();
+  const activos = mesState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+  if (esN && !activos.length) { alert('Agrega al menos un filtro de periodo (ej: Mes=1, Anio=2026).'); return; }
+  const desc = activos.map((f) => `${esc(f.columna)} = <b>${esc(f.desde !== undefined ? f.desde + ' - ' + f.hasta : f.valor)}</b>`).join(', ');
+  let warn;
+  if (!esN) {
+    warn = `Se <b>borrara TODA la tabla</b> <b>${esc(mesState.tabla)}</b> y se insertara el contenido del archivo.`;
+    if (mesState.count != null) warn += ` Hay <b>${Number(mesState.count).toLocaleString()}</b> filas existentes que se eliminaran.`;
+  } else {
+    warn = `Se <b>borraran e insertaran nuevamente</b> las filas de <b>${esc(mesState.tabla)}</b> que coincidan con: ${desc}.`;
+    if (mesState.count != null) warn += ` Hay <b>${Number(mesState.count).toLocaleString()}</b> filas existentes que se eliminaran.`;
+  }
+  $('mesConfirmSub').textContent = 'Archivo: ' + mesState.archivo.name + ' (' + mesState.archivo.size.toLocaleString() + ' bytes)';
+  $('mesConfirmWarn').innerHTML = warn;
+  $('overlayMes').hidden = false;
+});
+
+$('btnMesCancel').addEventListener('click', () => { $('overlayMes').hidden = true; });
+$('overlayMes').addEventListener('click', (e) => { if (e.target === $('overlayMes')) $('overlayMes').hidden = true; });
+$('btnMesOk').addEventListener('click', () => { $('overlayMes').hidden = true; cargarMes(); });
+
+async function cargarMes() {
+  const box = $('resultMes');
+  hideMesResult();
+  const activos = mesState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+  const btn = $('btnCargarMes');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Cargando datos...';
+  $('progressWrapMes').style.display = 'block';
+  $('progressFillMes').style.width = '0%';
+  $('progressFillMes').className = 'progress-fill';
+  $('progressPctMes').textContent = '0%';
+  $('progressMsgMes').textContent = 'Subiendo archivo...';
+
+  const fd = new FormData();
+  fd.append('archivo', mesState.archivo);
+  fd.append('tabla', mesState.tabla);
+  fd.append('filtros', JSON.stringify(activos));
+  fd.append('reemplazar', 'true');
+
+  try {
+    const resp = await fetch('/api/cargar-mes', { method: 'POST', body: fd });
+    if (!resp.ok) throw new Error('Error al conectar con el servidor.');
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        let eventType = 'message', data = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) eventType = line.slice(7);
+          if (line.startsWith('data: ')) data = line.slice(6);
+        }
+        if (!data) continue;
+        const d = JSON.parse(data);
+        if (eventType === 'progress') {
+          $('progressFillMes').style.width = d.pct + '%';
+          $('progressPctMes').textContent = d.pct + '%';
+          $('progressMsgMes').textContent = d.msg || '';
+          if (d.pct >= 100) $('progressFillMes').classList.add('done');
+        } else if (eventType === 'done') {
+          $('progressFillMes').style.width = '100%';
+          $('progressPctMes').textContent = '100%';
+          $('progressFillMes').classList.add('done');
+          $('progressMsgMes').textContent = 'Carga completa.';
+          showMesResult(d);
+        } else if (eventType === 'error') {
+          $('progressFillMes').classList.add('error');
+          $('progressMsgMes').textContent = d.message || 'Error';
+          showMesError(d.message || 'Error desconocido');
+        }
+      }
+    }
+  } catch (e) {
+    $('progressFillMes').classList.add('error');
+    $('progressMsgMes').textContent = e.message;
+    showMesError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Cargar datos';
+    refreshMesBtn();
+    if (mesState.archivo) mesCount();
+  }
+}
+
+function showMesResult(d) {
+  const box = $('resultMes');
+  box.className = 'result ok';
+  box.innerHTML = `
+    <h3>Carga completa (reemplazo)</h3>
+    <div class="small">Archivo: <b>${esc(d.archivo)}</b> | Tabla: <b>${esc(d.tabla)}</b><br>${d.filtros && d.filtros.length ? 'Filtros: <b>' + esc(d.filtros.join(' · ')) + '</b>' : 'Reemplazo de <b>toda</b> la tabla'}</div>
+    <div class="stats">
+      <div class="stat blue"><div class="num">${Number(d.totalFilas).toLocaleString()}</div><div class="lbl">Filas en archivo</div></div>
+      <div class="stat green"><div class="num">${Number(d.insertados).toLocaleString()}</div><div class="lbl">Insertadas</div></div>
+      <div class="stat red"><div class="num">${Number(d.eliminadas).toLocaleString()}</div><div class="lbl">Eliminadas (reemplazo)</div></div>
+      <div class="stat gray"><div class="num">${Number(d.duplicadas).toLocaleString()}</div><div class="lbl">Duplicadas en archivo</div></div>
+      <div class="stat gray"><div class="num">${Number(d.omitidas).toLocaleString()}</div><div class="lbl">Filas sin filtro</div></div>
+      <div class="stat gray"><div class="num">${Number(d.rellenadas).toLocaleString()}</div><div class="lbl">Celdas rellenadas</div></div>
+    </div>`;
+  box.style.display = 'block';
+}
+
+function showMesError(msg) {
+  const box = $('resultMes');
+  box.className = 'result err';
+  box.innerHTML = `<h3>Error en la carga</h3><div>${esc(msg)}</div>`;
+  box.style.display = 'block';
+}
+
+/* Mostrar/ocultar carga avanzada (claves) */
+$('btnShowOld').addEventListener('click', () => {
+  const c = $('cardCargar');
+  c.hidden = !c.hidden;
+  $('btnShowOld').textContent = c.hidden ? 'Mostrar carga avanzada (claves)' : 'Ocultar carga avanzada (claves)';
+});
+
+init();
 </script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const readline = require('readline');
-const sql = require('mssql');
+const { sql, getConfig } = require('./sql');
 const imp = require('./importer');
 require('dotenv').config();
 
@@ -29,7 +29,7 @@ async function main() {
   const mode = process.argv[2];
   const flags = parseArgs();
 
-  const pool = await sql.connect(imp.getConfig());
+  const pool = await sql.connect(getConfig());
 
   if (mode === '--tables') {
     const tablas = await imp.listTables(pool);

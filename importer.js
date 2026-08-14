@@ -1,18 +1,7 @@
-const sql = require('mssql');
+const { sql, getConfig } = require('./sql');
 const XLSX = require('xlsx');
 
-const getConfig = () => ({
-  server: process.env.DB_SERVER,
-  port: Number(process.env.DB_PORT) || 1433,
-  database: process.env.DB_DATABASE,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  options: {
-    encrypt: process.env.DB_ENCRYPT === 'true',
-    trustServerCertificate: process.env.DB_TRUST_CERT === 'true',
-  },
-  requestTimeout: 600000,
-});
+
 
 const MAX_LEN = (c) => {
   const len = c.CHARACTER_MAXIMUM_LENGTH;
@@ -124,21 +113,38 @@ const readExcel = (buffer, sheetName) => {
 
 const indexOf = (columns, name) => columns.findIndex((c) => norm(c.COLUMN_NAME) === norm(name));
 
-const processRows = (rows, columns, key) => {
+const compararColumnas = (rows, columns) => {
+  const headers = (rows[0] || []).map(norm).filter(Boolean);
+  const faltan = columns.filter((c) => !headers.includes(norm(c.COLUMN_NAME))).map((c) => c.COLUMN_NAME);
+  const sobran = headers.filter((h) => !columns.some((c) => norm(c.COLUMN_NAME) === h));
+  return { faltan, sobran };
+};
+
+const processRows = (rows, columns, keys) => {
+  const keyList = Array.isArray(keys) ? keys : [keys];
   const headers = rows[0].map(norm);
   const headerIdx = new Map();
   headers.forEach((h, i) => { if (h && !headerIdx.has(h)) headerIdx.set(h, i); });
 
-  const keyIdx = indexOf(columns, key);
-  if (keyIdx === -1) throw new Error(`La clave '${key}' no existe en la tabla.`);
-
-  if (!headers.includes(norm(key))) {
-    throw new Error(`La columna clave '${key}' no existe en el Excel. Columnas encontradas: ${headers.filter(Boolean).join(', ')}`);
-  }
-
-  const keyCol = columns[keyIdx];
-  const ciCollation = !!keyCol.COLLATION_NAME && /(_CI|_AI)(_|$)/i.test(keyCol.COLLATION_NAME);
-  const normKey = (v) => (ciCollation ? String(v).toLowerCase() : String(v));
+  const keyIdxs = keyList.map((k) => {
+    const idx = indexOf(columns, k);
+    if (idx === -1) throw new Error(`La clave '${k}' no existe en la tabla.`);
+    if (!headers.includes(norm(k))) {
+      throw new Error(`La columna clave '${k}' no existe en el Excel. Columnas encontradas: ${headers.filter(Boolean).join(', ')}`);
+    }
+    return idx;
+  });
+  const keyCols = keyIdxs.map((i) => columns[i]);
+  const normKey = (row) => {
+    let out = '';
+    for (let i = 0; i < keyIdxs.length; i++) {
+      const raw = row[keyIdxs[i]];
+      if (raw === null || raw === undefined || raw === '') return null;
+      const ci = !!keyCols[i].COLLATION_NAME && /(_CI|_AI)(_|$)/i.test(keyCols[i].COLLATION_NAME);
+      out += (ci ? String(raw).toLowerCase() : String(raw)) + String.fromCharCode(30);
+    }
+    return out;
+  };
 
   const indexes = columns.map((c) => ({ col: c, idx: headerIdx.get(norm(c.COLUMN_NAME)) }));
   const noMap = indexes.filter((x) => x.idx === undefined).map((x) => x.col.COLUMN_NAME);
@@ -148,10 +154,10 @@ const processRows = (rows, columns, key) => {
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row) continue;
-    const keyVal = row[keyIdx] == null ? null : row[keyIdx];
-    if (keyVal === null) { skipped.push(r + 1); continue; }
+    const nk = normKey(row);
+    if (nk === null) { skipped.push(r + 1); continue; }
     const values = indexes.map(({ col, idx }) => (idx === undefined ? null : toDbValue(row[idx], col)));
-    seen.set(normKey(keyVal), values);
+    seen.set(nk, values);
   }
 
   return {
@@ -163,10 +169,11 @@ const processRows = (rows, columns, key) => {
   };
 };
 
-const runImport = async (pool, schema, table, columns, key, uniqueRows) => {
+const runImport = async (pool, schema, table, columns, keys, uniqueRows) => {
+  const keyList = Array.isArray(keys) ? keys : [keys];
   const qualified = `${br(schema)}.${br(table)}`;
   const allCols = columns.map((c) => c.COLUMN_NAME);
-  const setCols = allCols.filter((n) => norm(n) !== norm(key));
+  const setCols = allCols.filter((n) => !keyList.some((k) => norm(k) === norm(n)));
 
   let insertados = 0;
   let actualizados = 0;
@@ -176,10 +183,11 @@ const runImport = async (pool, schema, table, columns, key, uniqueRows) => {
       req.input(`p${j}`, typeOf(c), values[j]);
     });
     const src = columns.map((c, j) => `@p${j} AS ${br(c.COLUMN_NAME)}`).join(', ');
+    const onClause = keyList.map((k) => `t.${br(k)} = s.${br(k)}`).join(' AND ');
     const merge = `
       MERGE ${qualified} AS t
       USING (SELECT ${src}) AS s
-      ON t.${br(key)} = s.${br(key)}
+      ON ${onClause}
       WHEN MATCHED THEN UPDATE SET ${setCols.map((n) => `t.${br(n)} = s.${br(n)}`).join(', ')}
       WHEN NOT MATCHED THEN INSERT (${allCols.map(br).join(', ')})
         VALUES (${allCols.map((n) => `s.${br(n)}`).join(', ')})
@@ -200,8 +208,10 @@ module.exports = {
   readExcel,
   processRows,
   runImport,
+  toDbValue,
   splitTable,
   norm,
   br,
   typeOf,
+  compararColumnas,
 };
