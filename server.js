@@ -3,7 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const os = require('os');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const { sql, getConfig, esTrusted } = require('./sql');
 const XLSX = require('xlsx');
 const AdmZip = require('adm-zip');
@@ -366,6 +366,150 @@ function enRango(valorRaw, meta, desdeRaw, hastaRaw) {
 
 const filtroEtiqueta = (f) => (f.desde !== undefined ? `${f.meta.COLUMN_NAME}: ${f.desde}-${f.hasta}` : `${f.meta.COLUMN_NAME}=${f.valor}`);
 
+function resolverAlias(headers, columns, tabla) {
+  const porNombre = new Map(columns.map((c) => [imp.norm(c.COLUMN_NAME), c.COLUMN_NAME]));
+  const porNombreFold = new Map();
+  for (const cn of porNombre.keys()) porNombreFold.set(normClave(cn), porNombre.get(cn));
+  const cfg = CONFIG_TABLAS[tabla] || null;
+  const usados = new Set();
+  const mapa = new Map();
+  for (const h of headers) {
+    const n = imp.norm(h);
+    if (!n || mapa.has(n) || usados.has(n)) continue;
+    if (porNombre.has(n)) { usados.add(n); continue; }
+    if (cfg) {
+      const tgt = cfg.alias[normClave(h)];
+      if (tgt && !usados.has(imp.norm(tgt))) {
+        mapa.set(n, tgt);
+        usados.add(imp.norm(tgt));
+        continue;
+      }
+    }
+    const fc = normClave(h);
+    if (fc && porNombreFold.has(fc) && !usados.has(porNombreFold.get(fc))) {
+      mapa.set(n, porNombreFold.get(fc));
+      usados.add(porNombreFold.get(fc));
+      continue;
+    }
+    if (n.length < 5) continue;
+    const cands = columns
+      .map((c) => imp.norm(c.COLUMN_NAME))
+      .filter((cn) => cn.length > n.length && cn.startsWith(n) && cn[n.length] === '_' && !usados.has(cn));
+    if (cands.length === 1) {
+      mapa.set(n, porNombre.get(cands[0]));
+      usados.add(cands[0]);
+    }
+  }
+  return mapa;
+}
+
+const normClave = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[^a-z]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+const fechaIso = (v) => {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(v).trim());
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : v;
+};
+
+const quitarCeros = (v) => {
+  const s = String(v).trim();
+  return s ? (s.replace(/^0+/, '') || s) : s;
+};
+
+const CONFIG_TABLAS = {
+  MAESTRO_PADRON_NOMINAL: {
+    alias: {
+      'tipo de documento de identidad del nino dni cui cnv cod pad': 'TIPO_DOC_N',
+      'codigo del padron nominal cod pad': 'COD_PAD_N',
+      'numero de certificado de nacido vivo cnv': 'COD_CNV_N',
+      'codigo unico de identidad cui': 'COD_CUI_N',
+      'numero de documento nacional de identificacion dni': 'COD_DNI_N',
+      'apellido paterno del nino': 'PAT_N',
+      'apellido materno del nino': 'MAT_N',
+      'nombres del nino': 'NOM_N',
+      'codigo de sexo del nino masculino femenino': 'GENERO1_N',
+      'fecha de nacimiento del nino dd mm aaaa': 'FECH_NAC_N',
+      'eje vial': 'EJE_VIAL_N',
+      'descripcion': 'DIRECCION_N',
+      'referencia de direccion': 'REFERENCIA_N',
+      'codigo de ubigeo del distrito': 'UBIGEO_DIST_N',
+      'nombre del departamento': 'DEPART_N',
+      'nombre de la provincia': 'PROVINCIA_N',
+      'nombre del distrito': 'DISTRITO_N',
+      'codigo de centro poblado': 'COD_CENTRO_POBLADO_N',
+      'nombre de centro poblado': 'NOM_CENTRO_POBLADO_N',
+      'area del centro poblado': 'AREA_CENTRO_POBLADO_N',
+      'menor visitado': 'MENOR_VISITADO',
+      'menor encontrado': 'MENOR_ENCONTRADO',
+      'fecha de visita': 'FECH_VISITA_N',
+      'fuente de datos': 'FUENTE_DATO_N',
+      'fecha de fuente de datos': 'FECH_FUENTE_DATO',
+      'codigo del eess nacimiento': 'COD_EESS_N',
+      'nombre del eess nacimiento': 'NOM_EESS_N',
+      'codigo del eess': 'COD_EESS_ATENCION_N',
+      'nombre del eess': 'EESS_ATENCION_N',
+      'frecuencia de atencion': 'FRECUENCIA_ATENCION_N',
+      'codigo del eess adscripcion': 'COD_EESS_ADSCRIPCION_N',
+      'nombre del eess adscripcion': 'NOM_EESS_ADSCRIPTCION_N',
+      'tipo de seguro del beneficiario ninguno sis essalud sanidad privado': 'NING_SIS_ESSALUD_SANIDAD_PRIVADO',
+      'programas sociales del nino a ninguno pin pvl juntos qaliwarma cuna scd cuna saf': 'PROGRAMA_SOCIAL_N',
+      'codigo de institucion educativa': 'COD_IE',
+      'nombre de institucion educativa': 'NOM_IE',
+      'tipo de documento de la madre': 'TIPO_DOC_MA',
+      'numero de documento de la madre del menor de edad': 'DNI_MA',
+      'apellido paterno de la madre del menor de edad': 'APE_PATERNO_MA',
+      'apellido materno de la madre del menor de edad': 'APE_MATERNO_MA',
+      'nombres de la madre del menor de edad': 'NOMBRE_MA',
+      'numero de celular de la madre': 'CELULAR_MA',
+      'direccion de correo electronico de la madre': 'CORREO_MA',
+      'grado de instruccion de la madre del menor de edad': 'GRADO_INST_MA',
+      'lengua habitual de la madre del menor de edad': 'LENGUA_MA',
+      'tipo de documento del jefe de familia': 'TIPO_DOC_PA',
+      'numero de documento del jefe de familia del menor de edad': 'DNI_PA',
+      'apellido paterno del jefe de familia del menor de edad': 'APE_PATERNO_PA',
+      'apellido materno del jefe de familia del menor de edad': 'APE_MATERNO_PA',
+      'nombres del jefe de familia del menor de edad': 'NOM_PA',
+      'estado registro inactivo activo activo observado': 'EstadoRegistro',
+      'fecha creacion de registro': 'FECHA_REGISTRO',
+      'usuario que crea': 'USUARIO_CREA_REG',
+      'fecha de modificacion del registro': 'FECHA_MODIFICA_REG',
+      'usuario que modifica': 'USUARIO_MODIFICA_REG',
+      'entidad': 'ENTIDAD',
+    },
+    convertir: {
+      'GENERO1_N': (v) => (v === '1' ? 'M' : v === '2' ? 'F' : v),
+      'FECH_NAC_N': fechaIso,
+      'FECHA_REGISTRO': fechaIso,
+      'FECHA_MODIFICA_REG': fechaIso,
+      'COD_EESS_N': quitarCeros,
+      'COD_EESS_ATENCION_N': quitarCeros,
+      'COD_EESS_ADSCRIPCION_N': quitarCeros,
+      'PROGRAMA_SOCIAL_N': (v) => String(v).replace(/,\s*$/, ''),
+    },
+    copiar: { 'cod_dni': 'COD_DNI_N' },
+    constantes: {
+      'dni': '1', 'cui': '1', 'cnv': '1', 'cod_padron': '1', 'estado': '1',
+      'prog_soc_pin': '0', 'prog_soc_pvl': '0', 'prog_soc_cuna_mas': '0',
+      'prog_soc_juntos': '0', 'prog_soc_otros': '0', 'prog_soc_ninguno': '0',
+      'programassocialesnino': '',
+    },
+  },
+};
+
+function extraerRarSync(buffer, nombre) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rar_'));
+  const rar = path.join(tmp, nombre);
+  fs.writeFileSync(rar, buffer);
+  try {
+    execFileSync('tar', ['-xf', rar, '-C', tmp], { timeout: 90000, windowsHide: true });
+  } catch (e) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {}
+    throw new Error('No se pudo extraer el RAR: ' + String(e.message || '').slice(0, 200));
+  }
+  try { fs.rmSync(rar, { force: true }); } catch (_) {}
+  return tmp;
+}
+
 async function insertarStaging(pool, schema, table, stagingId, columns, uniqueRows, send) {
   const stagingQual = `${imp.br(schema)}.${imp.br(stagingId)}`;
   await pool.request().query(`SELECT TOP 0 * INTO ${stagingQual} FROM ${imp.br(schema)}.${imp.br(table)};`);
@@ -574,7 +718,7 @@ function parseCsvLine(line, sep) {
 }
 
 function csvCanonical(text) {
-  const t = String(text).replace(/^\uFEFF/, '');
+  const t = String(text).replace(/^\uFEFF/, '').replace(/\u0000/g, '');
   const lines = t.split(/\r\n|\r|\n/);
   const cand = [';', '\t', '|', ','];
   let sep = ',';
@@ -661,41 +805,119 @@ async function cargarRapido({ req, schema, table, columns, filtros, reemplazar, 
   const originalname = req.file.originalname;
   const ext = originalname.split('.').pop().toLowerCase();
   send('progress', { pct: 8, msg: 'Camino rapido: extrayendo datos del archivo...' });
-
-  let buf = buffer;
-  let innerName = originalname;
-  if (ext === 'zip') {
-    const zip = new AdmZip(buffer);
-    const target = zip.getEntries().find((e) => !e.isDirectory && /\.(xlsx?|csv)$/i.test(e.entryName));
-    if (!target) throw new InfraError('No se encontro un Excel/CSV dentro del ZIP.');
-    buf = target.getData();
-    innerName = target.entryName;
-  }
-  const innerExt = innerName.split('.').pop().toLowerCase();
-  let csvText, headers, sheetName;
+  const qual = `${imp.br(schema)}.${imp.br(table)}`;
+  const pool = await sql.connect(getConfig());
+  let tx = null;
+  let txDeleteP = null;
+  let tmpFile = null;
+  let containerName = null;
+  let eliminadas = 0;
   try {
-    if (innerExt === 'xlsx') {
-      try { ({ csv: csvText, headers, sheetName } = xlsxToCsvFast(buf)); }
-      catch (_) { ({ csv: csvText, headers, sheetName } = xlsxToCsvSheetjs(buf)); }
-    } else if (innerExt === 'xls') {
-      ({ csv: csvText, headers, sheetName } = xlsxToCsvSheetjs(buf));
-    } else if (innerExt === 'csv') {
-      ({ csv: csvText, headers, sheetName } = csvCanonical(decodeBuffer(buf)));
-    } else {
-      throw new Error('Formato no soportado por el camino rapido.');
+    if (!(await containerListo())) throw new InfraError('El contenedor ' + CONT + ' no esta corriendo.');
+    tx = new sql.Transaction(pool);
+    await tx.begin();
+    if (reemplazar) {
+      txDeleteP = (async () => {
+        if (filtros.length) {
+          const cq = new sql.Request(tx);
+          const cwd = filtroWhere(filtros, cq);
+          const cr = await cq.query(`SELECT COUNT(*) AS n, COUNT(CASE WHEN ${cwd} THEN 1 END) AS m FROM ${qual};`);
+          const n = cr.recordset[0].n || 0;
+          const m = cr.recordset[0].m || 0;
+          if (n === m) {
+            await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
+            eliminadas = n;
+          } else {
+            const dq = new sql.Request(tx);
+            const wd = filtroWhere(filtros, dq);
+            const dr = await dq.query(`DELETE FROM ${qual} WHERE ${wd};`);
+            eliminadas = dr.rowsAffected[0] || 0;
+          }
+        } else {
+          const cr = await new sql.Request(tx).query(`SELECT COUNT(*) AS n FROM ${qual};`);
+          eliminadas = cr.recordset[0].n || 0;
+          await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
+        }
+      })();
+      txDeleteP.catch(() => {});
     }
-  } catch (e) {
-    throw new InfraError('No se pudo extraer el archivo: ' + (e.message || ''));
-  }
-  if (!csvText.trim()) throw new Error('El archivo esta vacio.');
-  send('progress', { pct: 12, msg: `Camino rapido: ${headers.length} columnas detectadas.` });
 
+    let buf = buffer;
+    let innerName = originalname;
+    let csvText, headers, sheetName;
+    if (ext === 'zip') {
+      const zip = new AdmZip(buffer);
+      const target = zip.getEntries().find((e) => !e.isDirectory && /\.(xlsx?|csv)$/i.test(e.entryName));
+      if (!target) throw new InfraError('No se encontro un Excel/CSV dentro del ZIP.');
+      buf = target.getData();
+      innerName = target.entryName;
+    } else if (ext === 'rar') {
+      const tmp = extraerRarSync(buffer, originalname);
+      try {
+        const cs = fs.readdirSync(tmp).filter((f) => /\.csv$/i.test(f)).sort();
+        const xls = fs.readdirSync(tmp).filter((f) => /\.xlsx?$/i.test(f));
+        if (cs.length >= 2) {
+          let nCols = -1;
+          const partes = [];
+          for (const f of cs) {
+            const t = decodeBuffer(fs.readFileSync(path.join(tmp, f)));
+            const lines = t.split(/\r?\n/).filter((l) => l.trim().length);
+            if (!lines.length) continue;
+            const cel = (l) => l.trim().replace(/^"|"$/g, '');
+            const sep = lines[0].includes('|') ? '|' : ';';
+            const k = lines[0].split(sep).map(cel).join('\u0001');
+            if (nCols === -1) nCols = k;
+            else if (k !== nCols) throw new InfraError('Los CSV del RAR tienen cabeceras distintas.');
+            partes.push(partes.length ? lines.slice(1).join('\n') : lines.join('\n'));
+          }
+          csvText = partes.join('\n');
+          ({ csv: csvText, headers, sheetName } = csvCanonical(csvText));
+          innerName = 'combinado.csv';
+        } else if (xls.length) {
+          buf = fs.readFileSync(path.join(tmp, xls[0]));
+          innerName = xls[0];
+        } else if (cs.length === 1) {
+          buf = fs.readFileSync(path.join(tmp, cs[0]));
+          innerName = cs[0];
+        } else {
+          throw new InfraError('No se encontro un Excel/CSV dentro del RAR.');
+        }
+      } finally {
+        try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {}
+      }
+    }
+    const innerExt = innerName.split('.').pop().toLowerCase();
+    try {
+      if (csvText === undefined) {
+        if (innerExt === 'xlsx') {
+          try { ({ csv: csvText, headers, sheetName } = xlsxToCsvFast(buf)); }
+          catch (_) { ({ csv: csvText, headers, sheetName } = xlsxToCsvSheetjs(buf)); }
+        } else if (innerExt === 'xls') {
+          ({ csv: csvText, headers, sheetName } = xlsxToCsvSheetjs(buf));
+        } else if (innerExt === 'csv') {
+          ({ csv: csvText, headers, sheetName } = csvCanonical(decodeBuffer(buf)));
+        } else {
+          throw new Error('Formato no soportado por el camino rapido.');
+        }
+      }
+    } catch (e) {
+      throw new InfraError('No se pudo extraer el archivo: ' + (e.message || ''));
+    }
+    if (csvText === undefined) throw new InfraError('No se pudo extraer el archivo.');
+    if (!csvText.trim()) throw new Error('El archivo esta vacio.');
+    send('progress', { pct: 12, msg: `Camino rapido: ${headers.length} columnas detectadas.` });
+
+  const cfg = CONFIG_TABLAS[table] || null;
+  const aliasMap = resolverAlias(headers, columns, table);
+  if (aliasMap.size) headers = headers.map((h) => aliasMap.get(imp.norm(h)) || h);
   const normHeaders = headers.map((h) => imp.norm(h));
   const headerIdx = new Map();
   normHeaders.forEach((h, i) => { if (h && !headerIdx.has(h)) headerIdx.set(h, i); });
   const faltan = [];
   for (const c of columns) {
     if (headerIdx.has(imp.norm(c.COLUMN_NAME))) continue;
+    if (cfg && cfg.constantes[imp.norm(c.COLUMN_NAME)] !== undefined) continue;
+    if (cfg && cfg.copiar && cfg.copiar[imp.norm(c.COLUMN_NAME)] !== undefined) continue;
     const ff = filtros.find((f) => f.desde === undefined && imp.norm(f.meta.COLUMN_NAME) === imp.norm(c.COLUMN_NAME));
     if (ff) continue;
     faltan.push(c.COLUMN_NAME);
@@ -720,10 +942,17 @@ async function cargarRapido({ req, schema, table, columns, filtros, reemplazar, 
     srcIdx[j] = i === undefined ? -1 : i;
     fillVal[j] = null;
     if (i === undefined) {
-      const fEq = filtros.find((f) => f.desde === undefined && imp.norm(f.meta.COLUMN_NAME) === imp.norm(c.COLUMN_NAME));
-      if (fEq) fillVal[j] = String(fEq.valor).trim();
+      const cst = cfg && cfg.constantes[imp.norm(c.COLUMN_NAME)];
+      if (cst !== undefined) fillVal[j] = cst;
+      else {
+        const fEq = filtros.find((f) => f.desde === undefined && imp.norm(f.meta.COLUMN_NAME) === imp.norm(c.COLUMN_NAME));
+        if (fEq) fillVal[j] = String(fEq.valor).trim();
+      }
     }
   }
+  const convCfg = cfg ? cfg.convertir : null;
+  const copiarCfg = cfg ? cfg.copiar : null;
+  const colIdx = copiarCfg ? new Map(columns.map((c, j) => [imp.norm(c.COLUMN_NAME), j])) : null;
   const eqFillByFileCol = new Map();
   for (const f of filtros) {
     if (f.desde !== undefined) continue;
@@ -739,11 +968,9 @@ async function cargarRapido({ req, schema, table, columns, filtros, reemplazar, 
   }
 
   const lines = csvText.split('\n');
-  const seen = new Set();
   const outLines = [columns.map((c) => c.COLUMN_NAME).join(SEP)];
   let nLineas = 0;
   let validas = 0;
-  let duplicadas = 0;
   let sinFiltro = 0;
   let mezclaOmitida = 0;
   let rellenadas = 0;
@@ -782,16 +1009,22 @@ async function cargarRapido({ req, schema, table, columns, filtros, reemplazar, 
           else v = '';
         } else {
           v = valorJs(columns[j], raw);
+          const conv = convCfg && convCfg[columns[j].COLUMN_NAME];
+          if (conv) v = conv(v);
         }
       }
       if (v !== '') allEmpty = false;
       row[j] = v;
     }
+    if (copiarCfg) {
+      for (const dest of Object.keys(copiarCfg)) {
+        const dj = colIdx.get(imp.norm(dest));
+        const sj = colIdx.get(imp.norm(copiarCfg[dest]));
+        if (dj !== undefined && sj !== undefined) row[dj] = row[sj];
+      }
+    }
     if (allEmpty) { sinFiltro++; continue; }
     validas++;
-    const key = row.join(SEP).toLowerCase();
-    if (seen.has(key)) { duplicadas++; continue; }
-    seen.add(key);
     outLines.push(row.join(SEP));
   }
 
@@ -814,74 +1047,48 @@ async function cargarRapido({ req, schema, table, columns, filtros, reemplazar, 
 
   const filasValidas = outLines.length - 1;
   if (!filasValidas) throw new Error('El archivo no tiene filas validas.');
-  send('progress', { pct: 16, msg: `Camino rapido: ${filasValidas.toLocaleString()} filas validas (${duplicadas.toLocaleString()} duplicadas).` });
+  send('progress', { pct: 16, msg: `Camino rapido: ${filasValidas.toLocaleString()} filas validas.` });
 
-  const tmpFile = path.join(os.tmpdir(), `imp_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`);
-  const containerName = `import_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`;
-  const stagingId = `tmpF${Date.now()}`;
-  const stagingQual = `${imp.br(schema)}.${imp.br(stagingId)}`;
-  const qual = `${imp.br(schema)}.${imp.br(table)}`;
-  const colList = columns.map((c) => imp.br(c.COLUMN_NAME)).join(', ');
-  const pool = await sql.connect(getConfig());
-  let tx = null;
+  tmpFile = path.join(os.tmpdir(), `imp_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`);
+  containerName = `import_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`;
+  await txDeleteP;
+  fs.writeFileSync(tmpFile, outLines.join('\n') + '\n', 'utf8');
+  await asegurarImportDir();
+  await copiarAlContenedor(tmpFile, containerName);
+  send('progress', { pct: 22, msg: 'Camino rapido: BULK INSERT...' });
+  let insertados = 0;
   try {
-    if (!(await containerListo())) throw new InfraError('El contenedor ' + CONT + ' no esta corriendo.');
-    fs.writeFileSync(tmpFile, outLines.join('\n') + '\n', 'utf8');
-    await asegurarImportDir();
-    await copiarAlContenedor(tmpFile, containerName);
-    try {
-      await pool.request().query(`SELECT TOP 0 ${colList} INTO ${stagingQual} FROM ${qual};`);
-      send('progress', { pct: 22, msg: 'Camino rapido: BULK INSERT en staging...' });
-      await pool.request().query(`BULK INSERT ${stagingQual} FROM '${RUTA_IMPORT}/${containerName}' WITH (FIRSTROW=2, FIELDTERMINATOR='|', ROWTERMINATOR='0x0A', MAXERRORS=0, TABLOCK);`);
-    } catch (e) {
-      if (e instanceof InfraError) throw e;
-      throw new InfraError('BULK INSERT en staging fallo: ' + (e.message || '').slice(0, 300));
-    }
+    const br = await new sql.Request(tx).query(`BULK INSERT ${qual} FROM '${RUTA_IMPORT}/${containerName}' WITH (FIRSTROW=2, FIELDTERMINATOR='|', ROWTERMINATOR='0x0A', MAXERRORS=0, TABLOCK); SELECT @@ROWCOUNT AS n;`);
+    insertados = (br.recordset && br.recordset[0] && br.recordset[0].n) || br.rowsAffected[0] || 0;
+  } catch (e) {
+    if (e instanceof InfraError) throw e;
+    throw new InfraError('BULK INSERT fallo: ' + (e.message || '').slice(0, 300));
+  }
+  if (!insertados) throw new Error('El archivo no tiene filas validas.');
+  await tx.commit();
+  tx = null;
 
-    const sCnt = await pool.request().query(`SELECT COUNT(*) AS n FROM ${stagingQual};`);
-    const totalEnStaging = sCnt.recordset[0].n;
-    if (!totalEnStaging) throw new Error('El archivo no tiene filas validas.');
-    send('progress', { pct: 30, msg: `Camino rapido: ${totalEnStaging.toLocaleString()} filas en staging.` });
-
-    tx = new sql.Transaction(pool);
-    await tx.begin();
-    let eliminadas = 0;
-    if (reemplazar) {
-      if (filtros.length) {
-        const dq = new sql.Request(tx);
-        const wd = filtroWhere(filtros, dq);
-        const dr = await dq.query(`DELETE FROM ${qual} WHERE ${wd};`);
-        eliminadas = dr.rowsAffected[0] || 0;
-      } else {
-        const dr = await new sql.Request(tx).query(`DELETE FROM ${qual};`);
-        eliminadas = dr.rowsAffected[0] || 0;
-      }
-    }
-    const ir = await new sql.Request(tx).query(`INSERT INTO ${qual} (${colList}) SELECT ${colList} FROM ${stagingQual};`);
-    const insertados = ir.rowsAffected[0] || 0;
-    await tx.commit();
-    tx = null;
-
-    send('progress', { pct: 95, msg: 'Carga completa.' });
-    return {
-      archivo: originalname,
-      tabla: `${schema}.${table}`,
-      reemplazar,
-      filtros: filtros.map(filtroEtiqueta),
-      totalFilas: nLineas,
-      filasValidas,
-      insertados,
-      eliminadas,
-      rellenadas,
-      duplicadas,
-      omitidas: sinFiltro + mezclaOmitida,
-      mezclaOmitida,
-    };
+  send('progress', { pct: 95, msg: 'Carga completa.' });
+  return {
+    archivo: originalname,
+    tabla: `${schema}.${table}`,
+    reemplazar,
+    filtros: filtros.map(filtroEtiqueta),
+    totalFilas: nLineas,
+    filasValidas,
+    insertados,
+    eliminadas,
+    rellenadas,
+    omitidas: sinFiltro + mezclaOmitida,
+    mezclaOmitida,
+  };
   } finally {
-    if (tx) { try { await tx.rollback(); } catch (_) {} }
-    try { await pool.request().query(`DROP TABLE ${stagingQual};`); } catch (_) {}
-    try { fs.unlinkSync(tmpFile); } catch (_) {}
-    try { await borrarEnContenedor(containerName); } catch (_) {}
+    if (tx) {
+      try { if (txDeleteP) await txDeleteP.catch(() => {}); } catch (_) {}
+      try { await tx.rollback(); } catch (_) {}
+    }
+    try { if (tmpFile) fs.unlinkSync(tmpFile); } catch (_) {}
+    try { if (containerName) await borrarEnContenedor(containerName); } catch (_) {}
   }
 }
 
@@ -952,7 +1159,6 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
   const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
 
   let pool;
-  let stagingQual = null;
   try {
     const tabla = req.body.tabla;
     if (!req.file) throw new Error('No se recibio ningun archivo.');
@@ -973,15 +1179,16 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
     if (filtros.length > 8) throw new Error('Maximo 8 filtros por carga.');
 
     const esNominal = /nominal[\s_]?trama/i.test(table);
-    if (esNominal && !filtros.some((f) => MESANIO_PAT.test(f.meta.COLUMN_NAME))) {
+    const tieneMesAnio = columns.some((c) => MESANIO_PAT.test(c.COLUMN_NAME));
+    if (esNominal && tieneMesAnio && !filtros.some((f) => MESANIO_PAT.test(f.meta.COLUMN_NAME))) {
       throw new Error(`La tabla ${schema}.${table} requiere un filtro de Mes o Año para la carga por periodo.`);
     }
 
     try {
       const done = await cargarRapido({ req, schema, table, columns, filtros, reemplazar, send });
-      send('done', done);
-      res.end();
-      await pool.close();
+      try { send('done', done); } catch (_) {}
+      try { res.end(); } catch (_) {}
+      try { await pool.close(); } catch (_) {}
       pool = null;
       return;
     } catch (e) {
@@ -995,6 +1202,9 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
     let totalFilas = rows.length - 1;
     if (totalFilas <= 0) throw new Error('El archivo esta vacio.');
     if (totalFilas > 2000000) throw new Error('El archivo supera el limite de 2.000.000 de filas.');
+
+    const aliasMap = resolverAlias(rows[0] || [], columns, table);
+    if (aliasMap.size) rows[0] = rows[0].map((h) => aliasMap.get(imp.norm(h)) || h);
 
     send('progress', { pct: 15, msg: `${totalFilas} filas en '${sheetName}'.` });
 
@@ -1097,7 +1307,7 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
 
     const stagingId = `tmp${Date.now()}`;
     send('progress', { pct: 45, msg: 'Creando tabla staging...' });
-    stagingQual = await insertarStaging(pool, schema, table, stagingId, columns, uniqueRows, send);
+    await insertarStaging(pool, schema, table, stagingId, columns, uniqueRows, send);
 
     send('progress', { pct: 80, msg: 'Insertando en la tabla final...' });
     const allCols = columns.map((c) => c.COLUMN_NAME);
@@ -1109,7 +1319,6 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
     const insertados = ic.recordset[0].c;
 
     await pool.request().query(`DROP TABLE ${imp.br(schema)}.${imp.br(stagingId)};`);
-    stagingQual = null;
     await pool.close(); pool = null;
 
     send('progress', { pct: 100, msg: 'Carga completa.' });
@@ -1123,7 +1332,6 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
     });
     res.end();
   } catch (e) {
-    if (stagingQual) { try { await pool.request().query(`DROP TABLE ${stagingQual};`); } catch (_) {} }
     if (pool) { try { await pool.close(); } catch (_) {} }
     send('error', { message: e.message }); res.end();
   }
@@ -1137,14 +1345,48 @@ function parseFileBuffer(buffer, originalname) {
     if (!target) throw new Error('No se encontro un archivo Excel o CSV dentro del ZIP.');
     const innerExt = target.entryName.split('.').pop().toLowerCase();
     const buf = target.getData();
-    const readOpts = { type: innerExt === 'csv' ? 'string' : 'buffer', cellDates: true };
+    const readOpts = innerExt === 'csv' ? { type: 'string', raw: true } : { type: 'buffer', cellDates: true };
     const raw = innerExt === 'csv' ? buf.toString('utf8') : buf;
     const wb = XLSX.read(raw, readOpts);
     const ws = wb.Sheets[wb.SheetNames[0]];
     return { rows: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }), sheetName: wb.SheetNames[0] };
   }
+  if (ext === 'rar') {
+    const tmp = extraerRarSync(buffer, originalname);
+    try {
+      const cs = fs.readdirSync(tmp).filter((f) => /\.csv$/i.test(f)).sort();
+      const xls = fs.readdirSync(tmp).filter((f) => /\.xlsx?$/i.test(f));
+      if (cs.length >= 2) {
+        let nCols = -1;
+        const partes = [];
+        for (const f of cs) {
+          const t = decodeBuffer(fs.readFileSync(path.join(tmp, f)));
+          const lines = t.split(/\r?\n/).filter((l) => l.trim().length);
+          if (!lines.length) continue;
+          const cel = (l) => l.trim().replace(/^"|"$/g, '');
+          const sep = lines[0].includes('|') ? '|' : ';';
+          const k = lines[0].split(sep).map(cel).join('\u0001');
+          if (nCols === -1) nCols = k;
+          else if (k !== nCols) throw new Error('Los CSV del RAR tienen cabeceras distintas.');
+          partes.push(partes.length ? lines.slice(1).join('\n') : lines.join('\n'));
+        }
+        const { csv, headers } = csvCanonical(partes.join('\n'));
+        return { rows: [headers, ...csv.split('\n').map((l) => l.split(SEP))], sheetName: 'combinado.csv' };
+      }
+      const inner = xls.length ? xls[0] : cs.length ? cs[0] : null;
+      if (!inner) throw new Error('No se encontro un archivo Excel o CSV dentro del RAR.');
+      const innerExt = inner.split('.').pop().toLowerCase();
+      const raw = fs.readFileSync(path.join(tmp, inner));
+      const readOpts = innerExt === 'csv' ? { type: 'string', raw: true } : { type: 'buffer', cellDates: true };
+      const wb = XLSX.read(innerExt === 'csv' ? raw.toString('utf8') : raw, readOpts);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      return { rows: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }), sheetName: wb.SheetNames[0] };
+    } finally {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {}
+    }
+  }
   if (ext === 'csv') {
-    const wb = XLSX.read(buffer.toString('utf8'), { type: 'string', cellDates: true });
+    const wb = XLSX.read(buffer.toString('utf8'), { type: 'string', raw: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
     return { rows: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }), sheetName: wb.SheetNames[0] };
   }
@@ -1181,6 +1423,9 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
 
     send('progress', { pct: 20, msg: 'Obteniendo columnas...' });
     const columns = await imp.getTableColumns(pool, schema, table);
+
+    const aliasMap = resolverAlias(rows[0] || [], columns, table);
+    if (aliasMap.size) rows[0] = rows[0].map((h) => aliasMap.get(imp.norm(h)) || h);
 
     const { faltan, sobran } = imp.compararColumnas(rows, columns);
     if (faltan.length) {

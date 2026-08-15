@@ -295,7 +295,7 @@
       <p class="main-text">Arrastra el archivo aqui</p>
       <p>Excel (.xlsx, .xls), CSV o ZIP</p>
       <p>o haz clic para seleccionar</p>
-      <input type="file" id="archivoMes" accept=".xlsx,.xls,.csv,.zip" style="display:none">
+      <input type="file" id="archivoMes" accept=".xlsx,.xls,.csv,.zip,.rar" style="display:none">
     </div>
     <div class="file-info" id="fileInfoMes">
       <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
@@ -350,7 +350,7 @@
       <p class="main-text">Arrastra un archivo aqui</p>
       <p>Excel (.xlsx, .xls), CSV o ZIP</p>
       <p>o haz clic para seleccionar</p>
-      <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.zip" style="display:none">
+      <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.zip,.rar" style="display:none">
     </div>
     <div class="file-info" id="fileInfo">
       <span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
@@ -853,8 +853,8 @@ fileInput.addEventListener('change', () => { if (fileInput.files.length) setFile
 
 function setFile(f) {
   const ext = f.name.split('.').pop().toLowerCase();
-  if (!['xlsx','xls','csv','zip'].includes(ext)) {
-    alert('Formato no soportado. Usa .xlsx, .xls, .csv o .zip');
+  if (!['xlsx','xls','csv','zip','rar'].includes(ext)) {
+    alert('Formato no soportado. Usa .xlsx, .xls, .csv, .zip o .rar');
     return;
   }
   selectedFile = f;
@@ -1079,7 +1079,10 @@ function onMesTable(tabla) {
   });
 }
 
-function esNominal() { return /nominal[\s_]?trama/i.test(mesState.tabla || ''); }
+function esNominal() {
+  return /nominal[\s_]?trama/i.test(mesState.tabla || '') &&
+    (mesState.meta || []).some((c) => /(^mes$|mesl|^anio$|^año$|fecha)/i.test(c.nombre || ''));
+}
 
 function aniosDisponibles() {
   const cur = new Date().getFullYear();
@@ -1595,8 +1598,8 @@ fileInputMes.addEventListener('change', () => { if (fileInputMes.files.length) s
 
 function setMesFile(f) {
   const ext = f.name.split('.').pop().toLowerCase();
-  if (!['xlsx', 'xls', 'csv', 'zip'].includes(ext)) {
-    alert('Formato no soportado. Usa .xlsx, .xls, .csv o .zip');
+  if (!['xlsx', 'xls', 'csv', 'zip', 'rar'].includes(ext)) {
+    alert('Formato no soportado. Usa .xlsx, .xls, .csv, .zip o .rar');
     return;
   }
   mesState.archivo = f;
@@ -1725,11 +1728,6 @@ function showMesResult(d) {
     <div class="small">Archivo: <b>${esc(d.archivo)}</b> | Tabla: <b>${esc(d.tabla)}</b><br>${d.filtros && d.filtros.length ? 'Filtros: <b>' + esc(d.filtros.join(' · ')) + '</b>' : 'Reemplazo de <b>toda</b> la tabla'}</div>
     <div class="stats">
       <div class="stat blue"><div class="num">${Number(d.totalFilas).toLocaleString()}</div><div class="lbl">Filas en archivo</div></div>
-      <div class="stat green"><div class="num">${Number(d.insertados).toLocaleString()}</div><div class="lbl">Insertadas</div></div>
-      <div class="stat red"><div class="num">${Number(d.eliminadas).toLocaleString()}</div><div class="lbl">Eliminadas (reemplazo)</div></div>
-      <div class="stat gray"><div class="num">${Number(d.duplicadas).toLocaleString()}</div><div class="lbl">Duplicadas en archivo</div></div>
-      <div class="stat gray"><div class="num">${Number(d.omitidas).toLocaleString()}</div><div class="lbl">Filas sin filtro</div></div>
-      <div class="stat gray"><div class="num">${Number(d.rellenadas).toLocaleString()}</div><div class="lbl">Celdas rellenadas</div></div>
     </div>`;
   box.style.display = 'block';
 }

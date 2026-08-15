@@ -54,8 +54,11 @@ const excelSerialToDate = (serial) => {
 
 const toDbValue = (v, col) => {
   if (v === null || v === undefined || v === '') return null;
-  if (v instanceof Date) return v;
   const isString = ['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext'].includes(col.DATA_TYPE);
+  if (v instanceof Date) {
+    if (isString) return v.toISOString().slice(0, 19).replace('T', ' ');
+    return v;
+  }
   if (typeof v === 'number') {
     if (IS_DATE(col.DATA_TYPE)) return excelSerialToDate(v);
     if (isString) return String(v);
