@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exportar tablas a Excel</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2f7,#e3e9f2);min-height:100vh;color:#1e293b}
+  .topbar{background:#0f172a;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .topbar .brand{font-size:17px;font-weight:700;letter-spacing:.3px}
+  .topbar .brand span{color:#38bdf8}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:#065f46;display:inline-flex;align-items:center;gap:6px}
+  .badge.err{background:#7f1d1d}
+  .container{max-width:760px;margin:28px auto;padding:0 16px;display:grid;gap:20px}
+  .container>*{min-width:0}
+  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 18px rgba(15,23,42,.07);border:1px solid #e2e8f0}
+  .card h2{font-size:18px;margin-bottom:18px;color:#0f172a}
+  label{display:block;font-size:13px;font-weight:600;color:#334155;margin:16px 0 6px}
+  .micro{font-size:11px;font-weight:400;color:#94a3b8}
+  .ic{width:17px;height:17px;vertical-align:-3.5px;display:inline-block;flex:none}
+  .brand .ic{width:19px;height:19px;vertical-align:-4px;margin-right:6px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:1px}
+  select{width:100%;padding:11px 14px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;font-size:14px;color:#0f172a}
+  select:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .btn{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover{background:#1d4ed8}
+  .btn:disabled{background:#cbd5e1;cursor:not-allowed}
+  .btn-green{background:#059669}
+  .btn-green:hover{background:#047857}
+  .spinner{display:inline-block;width:14px;height:14px;border:2.5px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .result{display:none;margin-top:20px;padding:18px;border-radius:10px;font-size:14px;line-height:1.7}
+  .result.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+  .result.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .preview-wrap{overflow:auto;max-height:320px;margin-top:12px;max-width:100%;min-width:0}
+  .data{border-collapse:collapse;width:100%;font-size:12px}
+  .data th,.data td{border:1px solid #e2e8f0;padding:6px 9px;text-align:left;white-space:nowrap}
+  .data th{background:#f1f5f9;color:#334155}
+  .nota{background:#f0f9ff;border:1px solid #bae6fd;color:#075985;border-radius:10px;padding:12px 14px;margin-top:16px;font-size:13px;line-height:1.6}
+
+  /* Calendario del periodo */
+  .calp-rango{display:flex;gap:8px;align-items:center;margin:14px 0 2px}
+.calp-check{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;cursor:pointer}
+  .calp-rango[hidden]{display:none}
+  .calp-rango input[type=date]{flex:1 1 0;min-width:0;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;background:#fff;color:#0f172a}
+  .calp-rango input[type=date]:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .calp-trigger{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;padding:10px 12px;background:#fff;border:1.5px dashed #c7d2fe;border-radius:12px;color:#3730a3;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
+  .calp-trigger:hover{background:#eef2ff;border-color:#818cf8}
+  .calp-trigger.set{border-style:solid;border-color:#10b981;background:#f0fdf4;color:#065f46}
+  .calp-guion{color:#94a3b8;font-weight:700;flex:none}
+  .calp-x{flex:none;width:30px;height:30px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#94a3b8;font-size:16px;cursor:pointer;line-height:1}
+  .calp-x:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626}
+  .calp-ic{color:#4f46e5;flex:none;width:18px;height:18px}
+  .calp-pop{position:fixed;z-index:80;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:12px;min-width:252px}
+  .calp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .calp-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;color:#0f172a}
+  .calp-title svg{color:#4f46e5}
+  .calp-btns{display:flex;gap:6px}
+  .calp-nav{background:#fff;border:1px solid #cbd5e1;border-radius:8px;width:30px;height:30px;font-size:14px;color:#334155;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .calp-nav:hover{background:#eef2ff;border-color:#c7d2fe;color:#4f46e5}
+  .calp-month,.calp-pill{display:inline-flex;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+  .calp-month{min-width:132px;height:30px;padding:0 10px;font-size:13px;font-weight:700;color:#4f46e5;text-transform:capitalize}
+  .calp-pill{height:30px;padding:0 10px;min-width:44px;font-size:13px;font-weight:700;color:#4f46e5}
+  .calp-month:hover,.calp-pill:hover{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}
+  .calp-yearrow{display:flex;gap:6px;margin-top:8px;align-items:center}
+  .calp-yeargo{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;font-size:12.5px;color:#0f172a;outline:none;background:#fff}
+  .calp-yeargo:focus{border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .calp-toolbar{display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
+  .calp-tool{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:5px 12px;font-size:11.5px;font-weight:600;color:#475569;cursor:pointer}
+  .calp-tool:hover{background:#eef2ff;border-color:#c7d2fe;color:#4f46e5}
+  .calp-tool.primary{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-tool.primary:hover{background:#4338ca}
+  .calp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .calp-dow{font-size:10px;font-weight:800;color:#64748b;text-align:center;padding:4px 0;text-transform:uppercase;letter-spacing:.04em}
+  .calp-day{position:relative;border:none;background:#fff;border:1px solid transparent;border-radius:9px;height:38px;font-size:12.5px;font-weight:600;color:#0f172a;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+  .calp-day:hover:not(.off){background:#eef2ff;border-color:#c7d2fe}
+  .calp-day.today{box-shadow:inset 0 0 0 1.5px #818cf8}
+  .calp-day.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-day.enrango{background:#e0e7ff;border-color:#c7d2fe;color:#3730a3}
+  .calp-day.off{opacity:.3;cursor:default;background:transparent}
+  .calp-day.dim{opacity:.38}
+  .calp-grid.meses{grid-template-columns:repeat(4,1fr);gap:6px}
+  .calp-grid.anios{grid-template-columns:repeat(4,1fr);gap:6px}
+  .calp-cell{background:#fff;border:1px solid #e2e8f0;border-radius:10px;height:52px;font-size:12.5px;font-weight:700;color:#0f172a;cursor:pointer;transition:background .12s,border-color .12s}
+  .calp-cell:hover:not(.off){background:#eef2ff;border-color:#c7d2fe}
+  .calp-cell.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-cell.off{opacity:.3;cursor:default}
+  .calp-seleccion{margin-top:10px;padding:8px 10px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;font-size:12px;font-weight:600;color:#3730a3;display:flex;align-items:center;gap:8px;justify-content:space-between}
+  .calp-seleccion[hidden]{display:none}
+  .calp-seleccion .limpia{background:none;border:none;color:#6366f1;font-size:11.5px;font-weight:700;cursor:pointer;text-decoration:underline}
+  .calp-seleccion .limpia:hover{color:#4338ca}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg><span>Exportar tablas a Excel</span></div>
+  <span class="badge" id="stBadge"><span class="dot"></span>Conectando...</span>
+</div>
+
+<div class="container">
+  <div class="card">
+    <h2>Exportar tabla a Excel</h2>
+
+    <label for="selTabla">Tabla a exportar</label>
+    <select id="selTabla"></select>
+
+    <label id="lblCalRangoExp" for="expCalDesde" hidden>Periodo a exportar (filtro por fecha)</label>
+    <div class="calp-rango" id="calRangoExp" hidden>
+      <button type="button" class="calp-trigger" id="expCalDesde" title="Fecha de inicio del periodo">
+        <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="expTxtDesde">Desde (fecha de inicio)</span>
+      </button>
+      <span class="calp-guion">–</span>
+      <button type="button" class="calp-trigger" id="expCalHasta" title="Fecha final del periodo">
+        <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="expTxtHasta">Hasta (fecha final)</span>
+      </button>
+      <button type="button" class="calp-x" id="expCalLimpia" title="Limpiar rango">&times;</button>
+    </div>
+
+    <label id="lblCalFechaExp" for="expFecDesde" hidden>Filtrar por fecha de atencion</label>
+    <div class="calp-rango" id="calFechaExp" hidden>
+      <input type="date" id="expFecDesde" title="Fecha inicio">
+      <span class="calp-guion">–</span>
+      <input type="date" id="expFecHasta" title="Fecha fin">
+      <button type="button" class="calp-x" id="expFecLimpia" title="Limpiar fechas">&times;</button>
+    </div>
+
+    <label id="lblCalPeriodoExp" for="expPerOn" hidden>Periodo a exportar</label>
+    <div class="calp-rango" id="calPeriodoExp" hidden>
+      <label class="calp-check" title="Si se desmarca se exporta la tabla completa"><input type="checkbox" id="expPerOn" checked> Filtrar por mes/año</label>
+      <div class="periodo-fila">
+        <select id="expSelMes" title="Mes del periodo"></select>
+        <select id="expSelAnio" title="Año del periodo"></select>
+      </div>
+      <button type="button" class="calp-x" id="expPerLimpia" title="Limpiar periodo">&times;</button>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn" id="btnVista">Vista previa (10 filas)</button>
+      <button class="btn btn-green" id="btnExp">Exportar tabla completa</button>
+    </div>
+    <div class="result" id="resultado"></div>
+
+    <div class="nota">Para NOMINAL_TRAMA_NUEVO se elige el mes y el año a exportar. Para VRS_2026 se muestran los campos de fecha y el sistema ejecuta el reporte (INM.ps_VRS_2026) antes de exportar.</div>
+  </div>
+</div>
+
+<div id="calPop" class="calp-pop" style="display:none"></div>
+
+<script>
+  const $ = (s) => document.getElementById(s);
+  const enc = encodeURIComponent;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const impName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  async function api(url, opts) {
+    const r = await fetch(url, opts);
+    let j;
+    try { j = await r.json(); } catch (_) { j = { ok: false, error: 'Respuesta invalida del servidor' }; }
+    if (!j.ok) throw new Error(j.error || 'Error del servidor');
+    return j;
+  }
+
+  const state = { expTable: '' };
+  const expState = { meta: [], filtros: [] };
+
+  async function cargarTablas() {
+    try {
+      const j = await api('/api/tablas');
+      const sel = $('selTabla');
+      sel.innerHTML = '<option value="">Elegir tabla para exportar...</option>' +
+        j.tablas.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+      $('stBadge').className = 'badge';
+      $('stBadge').innerHTML = '<span class="dot"></span>Conectado';
+    } catch (e) {
+      $('stBadge').className = 'badge err';
+      $('stBadge').innerHTML = '<span class="dot"></span>Sin conexion al servidor';
+    }
+  }
+
+  /* ── Seleccion de tabla ─────────────────────────────── */
+  async function onExpTable(tabla) {
+    state.expTable = tabla;
+    expState.meta = [];
+    expState.filtros = [];
+    renderExpRango();
+    if (!tabla) return;
+    try {
+      const j = await api('/api/filtros?tabla=' + enc(tabla));
+      if (state.expTable !== tabla) return;
+      expState.meta = j.columnas || [];
+      expState.filtros = [];
+      renderExpRango();
+    } catch (e) {
+      $('resultado').className = 'result err'; $('resultado').style.display = 'block';
+      $('resultado').innerHTML = esc(e.message);
+    }
+  }
+  $('selTabla').addEventListener('change', (e) => onExpTable(e.target.value));
+
+  /* ── Rango por periodo / fecha ──────────────────────── */
+  const tieneColPeriodo = (meta) => {
+    const m = meta || [];
+    return m.some((c) => /^(mes|mesl)$/i.test(c.nombre)) ||
+      m.some((c) => /^(anio|año)$/i.test(c.nombre)) ||
+      m.some((c) => /^dia$/i.test(c.nombre));
+  };
+  function expTienePeriodo() { return tieneColPeriodo(expState.meta); }
+
+  const TIPOS_FECHA = ['date', 'datetime', 'smalldatetime', 'datetime2', 'datetimeoffset'];
+  function expColFecha() {
+    const m = expState.meta || [];
+    return m.find((c) => TIPOS_FECHA.includes(String(c.tipo).toLowerCase()) || /fecha/i.test(c.nombre)) || null;
+  }
+  function expTieneFecha() {
+    return !!state.expTable && /VRS_2026/i.test(state.expTable) && !!expColFecha();
+  }
+
+  function renderExpRango() {
+    const rg = $('calRangoExp');
+    const lbl = $('lblCalRangoExp');
+    if (!rg || !lbl) return;
+    const esNomNuevo = /NOMINAL_TRAMA_NUEVO/i.test(state.expTable || '');
+    const base = !!state.expTable && expTienePeriodo() && !expTieneFecha();
+    rg.hidden = !(base && !esNomNuevo);
+    lbl.hidden = !(base && !esNomNuevo);
+    renderExpPeriodo(base && esNomNuevo);
+    renderExpFecha();
+  }
+  function renderExpPeriodo(visible) {
+    const pg = $('calPeriodoExp');
+    const lbl = $('lblCalPeriodoExp');
+    if (!pg || !lbl) return;
+    pg.hidden = !visible;
+    lbl.hidden = !visible;
+    if (visible) poblarExpPeriodo();
+    else expPerOff();
+  }
+  function poblarExpPeriodo() {
+    const selA = $('expSelAnio'), selM = $('expSelMes');
+    const cb = $('expPerOn');
+    if (!selA || !selM) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    if (!selA.options.length) {
+      let opts = '';
+      for (let y = curY; y >= Math.max(2020, curY - 6); y--) opts += `<option value="${y}">${y}</option>`;
+      selA.innerHTML = opts;
+      selM.innerHTML = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+    }
+    selA.value = String(curY);
+    selM.value = String(curM);
+    actualizarExpMeses();
+    if (cb) cb.checked = true;
+    selA.disabled = false;
+    selM.disabled = false;
+    expPeriodoAplicar();
+  }
+  function expPerOff() {
+    const cb = $('expPerOn');
+    const selA = $('expSelAnio'), selM = $('expSelMes');
+    if (cb) cb.checked = false;
+    if (selA) selA.disabled = true;
+    if (selM) selM.disabled = true;
+    expState.filtros = [];
+  }
+  function actualizarExpMeses() {
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    const selA = $('expSelAnio'), selM = $('expSelMes');
+    if (!selA || !selM) return;
+    const a = Number(selA.value);
+    Array.from(selM.options).forEach((o) => { o.disabled = a === curY && Number(o.value) > curM; });
+    const sel = selM.selectedOptions[0];
+    if (sel && sel.disabled) selM.value = String(curM);
+  }
+  function expPeriodoAplicar() {
+    const meta = expState.meta || [];
+    const findCol = (re) => { const c = meta.find((x) => re.test(x.nombre)); return c ? c.nombre : null; };
+    const nomMes = findCol(/^(mes|mesl)$/i) || 'Mes';
+    const nomAnio = findCol(/^(anio|año)$/i) || 'Anio';
+    const m = $('expSelMes').value, a = $('expSelAnio').value;
+    expState.filtros = [
+      { columna: nomMes, valor: String(m) },
+      { columna: nomAnio, valor: String(a) },
+    ];
+  }
+  function renderExpFecha() {
+    const box = $('calFechaExp');
+    const lbl = $('lblCalFechaExp');
+    if (!box || !lbl) return;
+    const visible = expTieneFecha();
+    box.hidden = !visible;
+    lbl.hidden = !visible;
+    if (visible) {
+      const col = expColFecha();
+      lbl.textContent = 'Filtrar por ' + col.nombre;
+    }
+    if (!visible) expFecLimpiar(true);
+  }
+  function expFecLimpiar(soloFiltros) {
+    if (!soloFiltros) {
+      const ds = $('expFecDesde'), dh = $('expFecHasta');
+      if (ds) ds.value = '';
+      if (dh) dh.value = '';
+    }
+    const col = expColFecha();
+    if (!col) return;
+    expState.filtros = expState.filtros.filter((f) => !impName(f.columna, col.nombre));
+  }
+  function expFecAplicar() {
+    const col = expColFecha();
+    if (!col) return;
+    const ds = $('expFecDesde').value, dh = $('expFecHasta').value;
+    expState.filtros = expState.filtros.filter((f) => !impName(f.columna, col.nombre));
+    if (ds && dh) {
+      if (ds > dh) { alert('La fecha inicio no puede ser despues de la fecha fin.'); $('expFecDesde').value = ''; $('expFecHasta').value = ''; return; }
+      expState.filtros.push({ columna: col.nombre, desde: ds, hasta: dh });
+    }
+  }
+  $('expFecDesde').addEventListener('change', expFecAplicar);
+  $('expFecHasta').addEventListener('change', expFecAplicar);
+  $('expFecLimpia').addEventListener('click', () => { expFecLimpiar(); });
+  $('expSelMes').addEventListener('change', expPeriodoAplicar);
+  $('expSelAnio').addEventListener('change', () => { actualizarExpMeses(); expPeriodoAplicar(); });
+  $('expPerLimpia').addEventListener('click', () => { poblarExpPeriodo(); });
+  $('expPerOn').addEventListener('change', () => {
+    if ($('expPerOn').checked) { $('expSelMes').disabled = false; $('expSelAnio').disabled = false; expPeriodoAplicar(); }
+    else { $('expSelMes').disabled = true; $('expSelAnio').disabled = true; expState.filtros = []; }
+  });
+
+  function expFstr() {
+    const activos = expState.filtros.filter((f) => f.columna && (f.valor || f.desde !== undefined));
+    return activos.map((f) => f.desde !== undefined
+      ? `${enc(f.columna)}:${enc(f.desde)}:${enc(f.hasta)}`
+      : `${enc(f.columna)}:${enc(f.valor)}`).join(',');
+  }
+
+  /* ── Calendario del periodo (rango) ─────────────────── */
+  const NOM_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const NOM_MES_C = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const calP = { vista: 'dias', m: null, a: null };
+  let calpModo = 'exp';
+  const calpEstado = () => expState;
+  const calpR = { from: null, to: null };
+  let calpObjetivo = 'desde';
+  let calpAbierto = false;
+  let calpToque = 0;
+
+  function calpDetect() {
+    const meta = calpEstado().meta || [];
+    const find = (re) => { const c = meta.find((x) => re.test(x.nombre)); return c ? c.nombre : null; };
+    return { d: find(/^dia$/i), m: find(/^(mes|mesl)$/i), a: find(/^(anio|año)$/i) };
+  }
+  function calpMapear() {
+    const c = calpDetect();
+    const row = (n) => (n ? calpEstado().filtros.find((f) => impName(f.columna, n)) : null);
+    return {
+      d: row(c.d), m: row(c.m), a: row(c.a),
+      nombres: c,
+      tieneDia: !!c.d, tieneMes: !!c.m, tieneAnio: !!c.a,
+    };
+  }
+  function calpFila(nombre) {
+    if (!nombre) return null;
+    const est = calpEstado();
+    let f = est.filtros.find((x) => impName(x.columna, nombre));
+    if (f) return f;
+    const nf = { columna: nombre, valor: '' };
+    est.filtros.push(nf);
+    return nf;
+  }
+  const calpFmt = (d) => (d ? d.getDate() + ' ' + NOM_MES_C[d.getMonth()] + ' ' + d.getFullYear() : '');
+
+  function calpLimpiaRows() {
+    const mm = calpMapear();
+    [mm.nombres.d, mm.nombres.m, mm.nombres.a].forEach((n) => {
+      if (!n) return;
+      const f = calpEstado().filtros.find((x) => impName(x.columna, n));
+      if (f) { f.valor = ''; delete f.desde; delete f.hasta; }
+    });
+  }
+  function calpTerminar() { renderExpRango(); }
+  function calpAplicar() {
+    const mm = calpMapear();
+    calpLimpiaRows();
+    const F = calpR.from, T = calpR.to;
+    if (!F && !T) { calpTerminar(); renderCalPeriodo(true); return; }
+    const f = F || T, t = T || F;
+    if (f.getFullYear() !== t.getFullYear() || f.getMonth() !== t.getMonth()) {
+      alert('El rango debe estar dentro de un mismo mes (ej: 01-08 a 31-08 de 2026). Elige nuevamente.');
+      return;
+    }
+    if (mm.tieneMes) { const x = calpFila(mm.nombres.m); if (x) x.valor = String(f.getMonth() + 1); }
+    if (mm.tieneAnio) { const x = calpFila(mm.nombres.a); if (x) x.valor = String(f.getFullYear()); }
+    if (mm.tieneDia) {
+      const dim = new Date(f.getFullYear(), f.getMonth() + 1, 0).getDate();
+      const d1 = f.getDate(), d2 = t.getDate();
+      if (d1 === 1 && d2 === dim) {
+        const x = calpFila(mm.nombres.d);
+        if (x) { x.valor = ''; delete x.desde; delete x.hasta; }
+      } else if (d1 === d2) {
+        const x = calpFila(mm.nombres.d);
+        if (x) { x.valor = String(d1); delete x.desde; delete x.hasta; }
+      } else {
+        const x = calpFila(mm.nombres.d);
+        if (x) { x.valor = ''; x.desde = String(Math.min(d1, d2)); x.hasta = String(Math.max(d1, d2)); }
+      }
+    }
+    calpTerminar(); renderCalPeriodo(true);
+  }
+  function calpRangoLimpiar() {
+    calpR.from = null; calpR.to = null;
+    calpLimpiaRows();
+    calpTerminar(); renderCalPeriodo(true);
+  }
+  function pintarTriggers() {
+    const par = (idTrig, idTxt, desde) => {
+      const tg = $(idTrig);
+      if (!tg) return;
+      const f = desde ? calpR.from : calpR.to;
+      $(idTxt).textContent = f ? calpFmt(f) : (desde ? 'Desde (fecha de inicio)' : 'Hasta (fecha final)');
+      tg.classList.toggle('set', !!f);
+    };
+    par('expCalDesde', 'expTxtDesde', true);
+    par('expCalHasta', 'expTxtHasta', false);
+  }
+  function calpSoloMes() {
+    return calpModo === 'exp' && /NOMINAL_TRAMA_NUEVO/i.test(state.expTable);
+  }
+
+  function renderCalPeriodo(silencioso) {
+    const box = $('calPop');
+    if (!box) return;
+    const mm = calpMapear();
+    if (!mm.tieneDia && !mm.tieneMes && !mm.tieneAnio) { box.style.display = 'none'; calpAbierto = false; return; }
+    const soloMes = calpSoloMes();
+
+    const now = new Date();
+    if (calP.vista === 'dias' && !mm.tieneDia) calP.vista = mm.tieneMes ? 'meses' : 'anios';
+    if (!mm.tieneMes && calP.vista === 'meses') calP.vista = mm.tieneDia ? 'dias' : 'anios';
+    if (!mm.tieneAnio && calP.vista === 'anios') calP.vista = mm.tieneDia ? 'dias' : 'meses';
+    if (soloMes) calP.vista = 'meses';
+
+    const ancla = calpObjetivo === 'hasta' && calpR.from ? calpR.from : (calpR.from || calpR.to || now);
+    if (calP.m == null) { calP.m = ancla.getMonth() + 1; calP.a = ancla.getFullYear(); }
+    else if (calpObjetivo === 'hasta' && calpR.from) { calP.m = calpR.from.getMonth() + 1; calP.a = calpR.from.getFullYear(); }
+
+    const labelMes = NOM_MES[calP.m - 1];
+    const hoy = now.getDate();
+    const titulo = (calpObjetivo === 'hasta' && calpR.from ? 'Hasta (final)' : calpObjetivo === 'hasta' ? 'Hasta (fecha final)' : 'Desde (fecha de inicio)');
+
+    const d1 = calpR.from && calP.a === calpR.from.getFullYear() && calP.m === calpR.from.getMonth() + 1 ? calpR.from.getDate() : null;
+    const d2 = calpR.to && calP.a === calpR.to.getFullYear() && calP.m === calpR.to.getMonth() + 1 ? calpR.to.getDate() : null;
+    const lo = d1 !== null && d2 !== null ? Math.min(d1, d2) : null;
+    const hi = d1 !== null && d2 !== null ? Math.max(d1, d2) : null;
+
+    let html = '<div class="calp-head"><div class="calp-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> ' + esc(titulo) + '</div>';
+    html += '<div class="calp-btns">';
+    if (calP.vista === 'dias') {
+      if (mm.tieneMes) html += `<button type="button" class="calp-nav" data-cal-nav="mes" data-mnav="-1" title="Mes anterior">&#9664;</button>` +
+        `<button type="button" class="calp-month" data-caltitle="mes" title="Cambiar mes">${labelMes}</button>` +
+        `<button type="button" class="calp-nav" data-cal-nav="mes" data-mnav="1" title="Mes siguiente">&#9654;</button>`;
+      else html += `<span class="calp-pill" title="Mes" style="color:#64748b;cursor:default">${labelMes}</span>`;
+      if (mm.tieneAnio) html += `<button type="button" class="calp-pill" data-caltitle="anio" title="Cambiar año">${calP.a}</button>`;
+    } else if (calP.vista === 'meses') {
+      if (mm.tieneAnio) html += `<button type="button" class="calp-pill" data-caltitle="anio" title="Cambiar año">${calP.a}</button>`;
+    } else {
+      html += '<b style="color:#4f46e5">Selecciona un año</b>';
+    }
+    html += '</div></div>';
+
+    html += '<div class="calp-toolbar">' +
+      (soloMes ? '' : `<button type="button" class="calp-tool primary" data-calhoy="1">Hoy</button>`) +
+      (mm.tieneDia && !soloMes ? `<button type="button" class="calp-tool" data-calmesc="1">Todo el mes</button>` : '') +
+      '<button type="button" class="calp-tool" data-callimpia="1">Limpiar</button>' +
+      '</div>';
+
+    if (calP.vista === 'dias') {
+      const dim = new Date(calP.a, calP.m, 0).getDate();
+      const first = new Date(calP.a, calP.m - 1, 1).getDay();
+      html += '<div class="calp-grid">' + ['Do','Lu','Ma','Mi','Ju','Vi','Sa'].map((d) => `<div class="calp-dow">${d}</div>`).join('');
+      html += Array.from({ length: first }, () => '<div></div>').join('');
+      for (let k = 1; k <= dim; k++) {
+        const esHoy = calP.a === now.getFullYear() && calP.m === now.getMonth() + 1 && k === hoy;
+        const esFuturo = calP.a > now.getFullYear() ||
+          (calP.a === now.getFullYear() && calP.m > now.getMonth() + 1) ||
+          (calP.a === now.getFullYear() && calP.m === now.getMonth() + 1 && k > hoy);
+        const borde = (k === d1 && k === d2) || (lo !== null && (k === lo || k === hi)) || (d1 !== null && d2 === null && k === d1) || (d2 !== null && d1 === null && k === d2);
+        const inter = lo !== null && hi !== null && k > lo && k < hi;
+        html += `<button type="button" class="calp-day${esHoy ? ' today' : ''}${esFuturo ? ' off' : ''}${borde ? ' sel' : ''}${inter ? ' enrango' : ''}" data-caldia="${k}">${k}</button>`;
+      }
+      html += '</div>';
+    } else if (calP.vista === 'meses') {
+      html += '<div class="calp-grid meses">' + NOM_MES_C.map((n, mi) => {
+        const esFuturo = calP.a > now.getFullYear() || (calP.a === now.getFullYear() && mi + 1 > now.getMonth() + 1);
+        return `<button type="button" class="calp-cell${esFuturo ? ' off' : ''}" data-calmes-el="${mi + 1}">${n}</button>`;
+      }).join('') + '</div>';
+    } else {
+      const base = Math.floor((calP.a - 1) / 12) * 12 + 1;
+      html += '<div class="calp-grid anios">' + Array.from({ length: 12 }, (_, k) => {
+        const y = base + k;
+        const sel = calpR.from && y === calpR.from.getFullYear();
+        return `<button type="button" class="calp-cell${y > now.getFullYear() ? ' off' : ''}${sel ? ' sel' : ''}" data-calanio-el="${y}">${y}</button>`;
+      }).join('') + '</div>';
+      html += '<div class="calp-toolbar" style="margin-top:8px;justify-content:center">' +
+        `<button type="button" class="calp-tool" data-caldeca="-1">&#9664;</button><button type="button" class="calp-tool" data-caldeca="1">&#9654;</button></div>`;
+    }
+
+    const rangoTxt = (() => {
+      if (calpR.from && calpR.to) {
+        const f = calpFmt(calpR.from), t = calpFmt(calpR.to);
+        return f === t ? f : f + ' – ' + t;
+      }
+      return calpR.from ? calpFmt(calpR.from) : (calpR.to ? calpFmt(calpR.to) : '');
+    })();
+    html += `<div class="calp-seleccion"${rangoTxt ? '' : ' hidden'}>` +
+      `<span>Periodo: <b>${esc(rangoTxt)}</b></span>` +
+      `<button type="button" class="limpia" data-callimpia="1">Limpiar</button></div>`;
+
+    if (calP.vista !== 'dias') {
+      html += `<div class="calp-yearrow"><input type="number" class="calp-yeargo" min="1900" max="9999" placeholder="Ir al año (ej: ${now.getFullYear()})" /><button type="button" class="calp-tool" data-cal-yaño="1">Ir</button><button type="button" class="calp-tool" data-cal-hoy-año="1">Este año</button></div>`;
+    }
+
+    box.innerHTML = html;
+    pintarTriggers();
+    if (!silencioso) return;
+  }
+
+  function calpElegirDia(d) {
+    const fecha = new Date(calP.a, calP.m - 1, d);
+    const hoyLim = new Date();
+    hoyLim.setHours(0, 0, 0, 0);
+    if (fecha > hoyLim) { alert('No se permiten fechas posteriores a hoy (hoy: ' + calpFmt(hoyLim) + ').'); return; }
+    if (calpObjetivo === 'hasta' && calpR.from) {
+      if (fecha.getFullYear() !== calpR.from.getFullYear() || fecha.getMonth() !== calpR.from.getMonth()) {
+        alert('El rango debe estar dentro del mismo mes de la fecha de inicio.');
+        return;
+      }
+      calpR.to = fecha < calpR.from ? new Date(calpR.from) : fecha;
+    } else {
+      calpR.from = fecha;
+    }
+    calpAplicar();
+    calpCerrar();
+  }
+
+  function calpAbrir(objetivo, trig) {
+    calpObjetivo = objetivo || 'desde';
+    calpModo = 'exp';
+    renderCalPeriodo(true);
+    const box = $('calPop');
+    const r = trig.getBoundingClientRect();
+    box.style.display = 'block';
+    box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 336)) + 'px';
+    const bh = box.offsetHeight;
+    const gap = 6;
+    let top;
+    if (r.top - gap >= bh) {
+      top = r.top - bh - gap;
+    } else {
+      top = r.bottom + gap;
+    }
+    if (top + bh > window.innerHeight - gap) top = Math.max(gap, window.innerHeight - bh - gap);
+    top = Math.max(gap, top);
+    box.style.top = top + 'px';
+    calpAbierto = true;
+  }
+  function calpCerrar() {
+    const box = $('calPop');
+    if (box) box.style.display = 'none';
+    calpAbierto = false;
+  }
+  function calpIrAAnio() {
+    const inp = $('calPop').querySelector('.calp-yeargo');
+    if (!inp) return;
+    const n = Number(String(inp.value).trim());
+    const ahora = new Date();
+    if (!Number.isFinite(n) || n < 1900 || n > 9999) { alert('Escribe un año valido (ej: ' + ahora.getFullYear() + ').'); return; }
+    if (n > ahora.getFullYear()) { alert('No se permiten años posteriores a ' + ahora.getFullYear() + '.'); return; }
+    const mm = calpMapear();
+    calP.a = n;
+    calP.vista = mm.tieneDia && !calpSoloMes() ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
+    renderCalPeriodo(true);
+  }
+
+  $('expCalDesde').addEventListener('click', () => {
+    if (calpAbierto && calpObjetivo === 'desde' && calpModo === 'exp') { calpCerrar(); return; }
+    calpAbrir('desde', $('expCalDesde'));
+  });
+  $('expCalHasta').addEventListener('click', () => {
+    if (calpAbierto && calpObjetivo === 'hasta' && calpModo === 'exp') { calpCerrar(); return; }
+    calpAbrir('hasta', $('expCalHasta'));
+  });
+  $('expCalLimpia').addEventListener('click', () => { calpModo = 'exp'; calpRangoLimpiar(); });
+
+  $('calPop').addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.classList.contains('off')) return;
+    calpToque = Date.now();
+    if (t.dataset.caldia !== undefined) { calpElegirDia(Number(t.dataset.caldia)); return; }
+    if (t.dataset.calmesEl !== undefined) {
+      const nm = Number(t.dataset.calmesEl);
+      const mm = calpMapear();
+      if (mm.tieneDia && !calpSoloMes()) { calP.m = nm; calP.vista = 'dias'; renderCalPeriodo(true); return; }
+      const ahora = new Date();
+      const f = new Date(calP.a, nm - 1, 1);
+      if (f > ahora) { calpCerrar(); return; }
+      calpR.from = f;
+      let tEnd = new Date(calP.a, nm, 0);
+      const hoyLim = new Date(); hoyLim.setHours(0, 0, 0, 0);
+      if (calpR.from > hoyLim) { alert('No se permiten fechas posteriores a hoy.'); calpCerrar(); return; }
+      if (tEnd > hoyLim) tEnd = hoyLim;
+      calpR.to = tEnd;
+      calpAplicar(); calpCerrar();
+      return;
+    }
+    if (t.dataset.calanioEl !== undefined) {
+      const na = Number(t.dataset.calanioEl);
+      const mm = calpMapear();
+    calP.a = na;
+    calP.vista = mm.tieneDia && !calpSoloMes() ? 'dias' : 'meses';
+      renderCalPeriodo(true);
+      return;
+    }
+    if (t.dataset.calNav === 'mes') {
+      let nm = calP.m + Number(t.dataset.mnav), na = calP.a;
+      if (nm < 1) { nm = 12; na--; }
+      if (nm > 12) { nm = 1; na++; }
+      calP.m = nm; calP.a = na;
+      renderCalPeriodo(true);
+      return;
+    }
+    if (t.dataset.caltitle === 'mes') { calP.vista = 'meses'; renderCalPeriodo(true); return; }
+    if (t.dataset.caltitle === 'anio') { calP.vista = 'anios'; renderCalPeriodo(true); return; }
+    if (t.dataset.calhoy !== undefined) {
+      const n = new Date();
+      calpR.from = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+      calpR.to = new Date(calpR.from);
+      calpAplicar(); calpCerrar();
+      return;
+    }
+    if (t.dataset.calmesc !== undefined) {
+      const f = calpR.from || new Date(calP.a, calP.m - 1, 1);
+      const ahora = new Date();
+      const hoyLim = new Date(); hoyLim.setHours(0, 0, 0, 0);
+      if (f > hoyLim) { calpCerrar(); return; }
+      calpR.from = new Date(f.getFullYear(), f.getMonth(), 1);
+      let tEnd = new Date(f.getFullYear(), f.getMonth() + 1, 0);
+      if (tEnd > hoyLim) tEnd = hoyLim;
+      calpR.to = tEnd;
+      calpAplicar(); calpCerrar();
+      return;
+    }
+    if (t.dataset.caldeca !== undefined) { calP.a += 12 * Number(t.dataset.caldeca); renderCalPeriodo(true); return; }
+    if (t.dataset.callimpia !== undefined) { calpRangoLimpiar(); return; }
+    if (t.dataset.calYaño !== undefined) { calpIrAAnio(); return; }
+    if (t.dataset.calHoyAño !== undefined) {
+      const mm = calpMapear();
+      calP.a = new Date().getFullYear();
+      calP.vista = mm.tieneDia && !calpSoloMes() ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
+      renderCalPeriodo(true);
+      return;
+    }
+  });
+
+  $('calPop').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('calp-yeargo')) {
+      e.preventDefault();
+      calpIrAAnio();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (Date.now() - calpToque < 350) return;
+    if (e.target.closest('#calPop') || e.target.closest('.calp-trigger') || e.target.closest('#expCalLimpia')) return;
+    calpCerrar();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && calpAbierto) calpCerrar(); });
+
+  /* ── Vista previa ───────────────────────────────────── */
+  $('btnVista').addEventListener('click', async () => {
+    const box = $('resultado');
+    const t = state.expTable;
+    box.className = 'result'; box.style.display = 'none';
+    if (!t) { box.className = 'result err'; box.style.display = 'block'; box.innerHTML = 'Elige la tabla primero.'; return; }
+    const fstr = expFstr();
+    const qf = fstr ? '&f=' + enc(fstr) : '';
+    const btn = $('btnVista');
+    btn.disabled = true;
+    try {
+      const j = await api('/api/vista?tabla=' + enc(t) + qf);
+      let html = `<div class="result ok" style="display:block"><b>${Number(j.total).toLocaleString()}</b> filas en total. Primeras ${j.filas.length}:</div>`;
+      html += '<div class="preview-wrap"><table class="data"><tr>' +
+        j.columnas.map((c) => `<th>${esc(c)}</th>`).join('') + '</tr>';
+      for (const f of j.filas) {
+        html += '<tr>' + j.columnas.map((c) => {
+          let v = f[c];
+          if (v === null || v === undefined) v = '';
+          else if (v instanceof Date) v = v.toISOString().slice(0, 10);
+          else v = String(v);
+          if (v.length > 25) v = v.slice(0, 25) + '...';
+          return `<td>${esc(v)}</td>`;
+        }).join('') + '</tr>';
+      }
+      html += '</table></div>';
+      box.className = 'result ok'; box.style.display = 'block';
+      box.innerHTML = html;
+    } catch (e) {
+      box.className = 'result err'; box.style.display = 'block';
+      box.innerHTML = esc(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* ── Exportar (regenera VRS si corresponde) ─────────── */
+  $('btnExp').addEventListener('click', async () => {
+    const box = $('resultado');
+    const t = state.expTable;
+    box.className = 'result'; box.style.display = 'none';
+    if (!t) { box.className = 'result err'; box.style.display = 'block'; box.innerHTML = 'Elige la tabla primero.'; return; }
+    const fstr = expFstr();
+    const qf = fstr ? '&f=' + enc(fstr) : '';
+    const enPeriodo = (expTienePeriodo() || expTieneFecha()) && fstr;
+    const esVRS = /dbEstrategias\.INM\.VRS_2026/i.test(t);
+    const btn = $('btnExp');
+    btn.disabled = true;
+    btn.innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando Excel...';
+    try {
+      if (esVRS) {
+        box.className = 'result ok'; box.style.display = 'block';
+        box.innerHTML = 'Ejecutando procedimiento <b>INM.ps_VRS_2026</b>...';
+        const g = await api('/api/ejecutar-sp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sp: 'dbEstrategias.INM.ps_VRS_2026', tabla: 'dbEstrategias.INM.VRS_2026' }),
+        });
+        box.innerHTML = 'Reporte VRS generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas). Descargando Excel...';
+      }
+      const r = await fetch('/api/exportar?tabla=' + enc(t) + qf + '&fmt=csv');
+      if (!r.ok) {
+        let msg = 'Error al exportar.';
+        try { const j = await r.json(); msg = j.error || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      const blob = await r.blob();
+      const total = r.headers.get('X-Total-Filas') || '?';
+      const exportadas = r.headers.get('X-Exportadas') || total;
+      const cd = r.headers.get('Content-Disposition') || '';
+      const fm = /filename="([^"]+)"/.exec(cd);
+      const nombre = fm ? fm[1] : (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      box.className = 'result ok'; box.style.display = 'block';
+      box.innerHTML = '<b>' + exportadas + '</b> filas exportadas a <b>' + esc(nombre) + '</b> (' + (enPeriodo ? 'total del periodo' : 'total en tabla') + ': ' + Number(total).toLocaleString() + ').';
+    } catch (e) {
+      box.className = 'result err'; box.style.display = 'block';
+      box.innerHTML = esc(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Exportar tabla completa';
+    }
+  });
+
+  cargarTablas();
+</script>
+</body>
+</html>

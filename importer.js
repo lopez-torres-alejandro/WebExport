@@ -81,6 +81,13 @@ const splitTable = (t) => {
   return [p[0], p[1]];
 };
 
+const splitTabla = (t) => {
+  const p = String(t || '').split('.');
+  if (p.length === 2 && p[0] && p[1]) return [null, p[0], p[1]];
+  if (p.length === 3 && p[0] && p[1] && p[2]) return [p[0], p[1], p[2]];
+  throw new Error(`Tabla invalida '${t}'. Usa formato esquema.tabla o base.esquema.tabla (ej: dbo.MAESTRO_PACIENTE o dbEstrategias.INM.VRS_2026).`);
+};
+
 const listTables = async (pool) => {
   const r = await pool.request().query(
     "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME"
@@ -88,19 +95,22 @@ const listTables = async (pool) => {
   return r.recordset.map((x) => `${x.TABLE_SCHEMA}.${x.TABLE_NAME}`);
 };
 
-const getTableColumns = async (pool, schema, table) => {
+const getTableColumns = async (pool, schema, table, db) => {
+  const dbp = db ? `[${db}].` : '';
+  const objId = db ? `OBJECT_ID(@d + '.' + @s + '.' + @t)` : `OBJECT_ID(@s + '.' + @t)`;
   const r = await pool.request()
     .input('s', sql.NVarChar, schema)
     .input('t', sql.NVarChar, table)
+    .input('d', sql.NVarChar, db || null)
     .query(`SELECT c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION,
                    c.NUMERIC_SCALE, c.DATETIME_PRECISION, c.COLLATION_NAME, col.is_identity, col.is_computed
-            FROM INFORMATION_SCHEMA.COLUMNS c
-            JOIN sys.columns col
-              ON col.object_id = OBJECT_ID(@s + '.' + @t) AND col.name = c.COLUMN_NAME
+            FROM ${dbp}INFORMATION_SCHEMA.COLUMNS c
+            JOIN ${dbp}sys.columns col
+              ON col.object_id = ${objId} AND col.name = c.COLUMN_NAME
             WHERE c.TABLE_SCHEMA = @s AND c.TABLE_NAME = @t
             ORDER BY c.ORDINAL_POSITION`);
   if (!r.recordset.length) {
-    throw new Error(`Tabla '${schema}.${table}' no encontrada en la base.`);
+    throw new Error(`Tabla '${db ? db + '.' : ''}${schema}.${table}' no encontrada en la base.`);
   }
   return r.recordset.filter((c) => !c.is_identity && !c.is_computed);
 };
@@ -213,6 +223,7 @@ module.exports = {
   runImport,
   toDbValue,
   splitTable,
+  splitTabla,
   norm,
   br,
   typeOf,

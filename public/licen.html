@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte VRS 2026</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2f7,#e3e9f2);min-height:100vh;color:#1e293b}
+  .topbar{background:#0f172a;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .topbar .brand{font-size:17px;font-weight:700;letter-spacing:.3px}
+  .topbar .brand span{color:#38bdf8}
+  .container{max-width:720px;margin:28px auto;padding:0 16px;display:grid;gap:20px}
+  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 18px rgba(15,23,42,.07);border:1px solid #e2e8f0}
+  .card h2{font-size:18px;margin-bottom:6px;color:#0f172a}
+  label{display:block;font-size:13px;font-weight:600;color:#334155;margin:16px 0 6px}
+  .micro{font-size:11px;font-weight:400;color:#94a3b8}
+  .ic{width:17px;height:17px;vertical-align:-3.5px;display:inline-block;flex:none}
+  .brand .ic{width:19px;height:19px;vertical-align:-4px;margin-right:6px}
+  .btn{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover{background:#1d4ed8}
+  .btn:disabled{background:#cbd5e1;cursor:not-allowed}
+  .btn-green{background:#059669}
+  .btn-green:hover{background:#047857}
+  .spinner{display:inline-block;width:14px;height:14px;border:2.5px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .calp-rango{display:flex;gap:8px;align-items:center;margin:14px 0 2px;flex-wrap:wrap}
+  .calp-rango input[type=date]{flex:1 1 0;min-width:0;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;background:#fff;color:#0f172a}
+  .calp-rango input[type=date]:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .calp-guion{color:#94a3b8;font-weight:700;flex:none}
+  .result{display:none;margin-top:20px;padding:18px;border-radius:10px;font-size:14px;line-height:1.7}
+  .result.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+  .result.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .nota{background:#f0f9ff;border:1px solid #bae6fd;color:#075985;border-radius:10px;padding:12px 14px;margin-top:16px;font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg><span>Reporte VRS 2026</span> — Virus Sincitial Respiratorio</div>
+</div>
+
+<div class="container">
+  <div class="card">
+    <h2>Descarga del reporte VRS 2026</h2>
+    <span class="micro">El sistema genera el reporte (procedimiento INM.ps_VRS_2026) y descarga el Excel. Opcional: filtra por fecha de atencion.</span>
+
+    <label for="fecDesde">Filtrar por fecha de atencion (opcional)</label>
+    <div class="calp-rango">
+      <input type="date" id="fecDesde" title="Fecha inicio">
+      <span class="calp-guion">–</span>
+      <input type="date" id="fecHasta" title="Fecha fin">
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-green" id="btnExp">Descargar Excel</button>
+    </div>
+    <div class="result" id="resultado"></div>
+
+    <div class="nota">Si dejas las fechas vacias se descargara el reporte completo. Si eliges fechas, se descargara solo el periodo indicado.</div>
+  </div>
+</div>
+
+<script>
+  const $ = (s) => document.getElementById(s);
+  const enc = encodeURIComponent;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  async function api(url, opts) {
+    const r = await fetch(url, opts);
+    let j;
+    try { j = await r.json(); } catch (_) { j = { ok: false, error: 'Respuesta invalida del servidor' }; }
+    if (!j.ok) throw new Error(j.error || 'Error del servidor');
+    return j;
+  }
+  const VRS = 'dbEstrategias.INM.VRS_2026';
+  const SP = 'dbEstrategias.INM.ps_VRS_2026';
+
+  $('btnExp').addEventListener('click', async () => {
+    const btn = $('btnExp');
+    const box = $('resultado');
+    const desde = $('fecDesde').value;
+    const hasta = $('fecHasta').value;
+    if (desde && hasta && desde > hasta) {
+      box.className = 'result err'; box.style.display = 'block';
+      box.innerHTML = 'La fecha inicio no puede ser despues de la fecha fin.';
+      return;
+    }
+    if (!!desde !== !!hasta) {
+      box.className = 'result err'; box.style.display = 'block';
+      box.innerHTML = 'Elige ambas fechas (inicio y fin) o ninguna.';
+      return;
+    }
+    box.className = 'result ok'; box.style.display = 'block';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Generando reporte...';
+    try {
+      box.innerHTML = 'Ejecutando procedimiento <b>INM.ps_VRS_2026</b> (generando el reporte)...';
+      const g = await api('/api/ejecutar-sp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sp: SP, tabla: VRS }),
+      });
+      box.innerHTML = 'Reporte generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas). Descargando Excel...';
+      let qf = '';
+      if (desde && hasta) qf = '&f=' + enc('fecha_atencion:' + desde + ':' + hasta);
+      const r = await fetch('/api/exportar?tabla=' + enc(VRS) + qf);
+      if (!r.ok) {
+        let m = 'Error al exportar.';
+        try { const j = await r.json(); m = j.error || m; } catch (_) {}
+        throw new Error(m);
+      }
+      const blob = await r.blob();
+      const exportadas = r.headers.get('X-Exportadas') || '?';
+      const nombre = 'VRS_2026_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      box.innerHTML = 'Listo. <b>' + exportadas + '</b> filas descargadas en <b>' + esc(nombre) + '</b>' + (desde ? ' (fechas: ' + esc(desde) + ' a ' + esc(hasta) + ')' : ' (reporte completo)') + '.';
+    } catch (e) {
+      box.className = 'result err';
+      box.innerHTML = esc(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Descargar Excel';
+    }
+  });
+</script>
+</body>
+</html>

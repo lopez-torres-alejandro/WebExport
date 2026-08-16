@@ -13,6 +13,7 @@
   .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:#065f46;display:inline-flex;align-items:center;gap:6px}
   .badge.err{background:#7f1d1d}
   .container{max-width:980px;margin:28px auto;padding:0 16px;display:grid;gap:20px}
+  .container>*{min-width:0}
   .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 18px rgba(15,23,42,.07);border:1px solid #e2e8f0}
   .card h2{font-size:18px;margin-bottom:18px;color:#0f172a}
   label{display:block;font-size:13px;font-weight:600;color:#334155;margin:16px 0 6px}
@@ -130,7 +131,7 @@
   .stat.gray .num{color:#9ca3af}
   .warn-box{background:#fefce8;border:1px solid #fde047;color:#854d0e;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.5}
 
-  .preview-wrap{overflow:auto;max-height:320px;margin-top:12px}
+  .preview-wrap{overflow:auto;max-height:320px;margin-top:12px;max-width:100%;min-width:0}
   .data{border-collapse:collapse;width:100%;font-size:12px}
   .data th,.data td{border:1px solid #e2e8f0;padding:6px 9px;text-align:left;white-space:nowrap}
   .data th{background:#f1f5f9;color:#334155}
@@ -193,6 +194,7 @@
 
   /* Calendario unificado del periodo (flotante, rango) */
   .calp-rango{display:flex;gap:8px;align-items:center;margin:14px 0 2px}
+.calp-check{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;cursor:pointer}
   .calp-rango[hidden]{display:none}
   .calp-trigger{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;padding:10px 12px;background:#fff;border:1.5px dashed #c7d2fe;border-radius:12px;color:#3730a3;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
   .calp-trigger:hover{background:#eef2ff;border-color:#818cf8}
@@ -392,6 +394,24 @@
         <span id="expTxtHasta">Hasta (fecha final)</span>
       </button>
       <button type="button" class="calp-x" id="expCalLimpia" title="Limpiar rango">&times;</button>
+    </div>
+
+    <label id="lblCalFechaExp" for="expFecDesde" hidden>Filtrar por fecha de atencion</label>
+    <div class="calp-rango" id="calFechaExp" hidden>
+      <input type="date" id="expFecDesde" title="Fecha inicio">
+      <span class="calp-guion">–</span>
+      <input type="date" id="expFecHasta" title="Fecha fin">
+      <button type="button" class="calp-x" id="expFecLimpia" title="Limpiar fechas">&times;</button>
+    </div>
+
+    <label id="lblCalPeriodoExp" for="expPerOn" hidden>Periodo a exportar</label>
+    <div class="calp-rango" id="calPeriodoExp" hidden>
+      <label class="calp-check" title="Si se desmarca se exporta la tabla completa"><input type="checkbox" id="expPerOn" checked> Filtrar por mes/año</label>
+      <div class="periodo-fila">
+        <select id="expSelMes" title="Mes del periodo"></select>
+        <select id="expSelAnio" title="Año del periodo"></select>
+      </div>
+      <button type="button" class="calp-x" id="expPerLimpia" title="Limpiar periodo">&times;</button>
     </div>
 
     <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
@@ -1016,10 +1036,26 @@ $('btnExp').addEventListener('click', async () => {
   if (!t) { box.innerHTML = '<div class="result err" style="display:block">Elige la tabla primero.</div>'; return; }
   const fstr = expFstr();
   const qf = fstr ? '&f=' + enc(fstr) : '';
-  const enPeriodo = expTienePeriodo() && fstr;
+  const enPeriodo = (expTienePeriodo() || expTieneFecha()) && fstr;
+  const esVRS = /dbEstrategias\.INM\.VRS_2026/i.test(t);
   $('btnExp').disabled = true;
-  $('btnExp').innerHTML = '<span class="spinner"></span>Generando Excel...';
+  $('btnExp').innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando Excel...';
   try {
+    if (esVRS) {
+      box.innerHTML = '<div class="result ok" style="display:block">Ejecutando procedimiento <b>INM.ps_VRS_2026</b>...</div>';
+      const g = await fetch('/api/ejecutar-sp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sp: 'dbEstrategias.INM.ps_VRS_2026', tabla: 'dbEstrategias.INM.VRS_2026' }),
+      });
+      if (!g.ok) {
+        let msg = 'Error al generar el reporte VRS.';
+        try { const jj = await g.json(); msg = jj.error || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      const gj = await g.json();
+      box.innerHTML = `<div class="result ok" style="display:block">Reporte VRS generado (<b>${Number(gj.filas).toLocaleString()}</b> filas). Descargando Excel...</div>`;
+    }
     const r = await fetch('/api/exportar?tabla=' + enc(t) + qf);
     if (!r.ok) {
       let msg = 'Error al exportar.';
@@ -1028,10 +1064,12 @@ $('btnExp').addEventListener('click', async () => {
     }
     const blob = await r.blob();
     const total = r.headers.get('X-Total-Filas') || '?';
-    const exportadas = r.headers.get('X-Exportadas') || '?';
+    const exportadas = r.headers.get('X-Exportadas') || total;
+    const cd = r.headers.get('Content-Disposition') || '';
+    const fm = /filename="([^"]+)"/.exec(cd);
+    const nombre = fm ? fm[1] : (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const nombre = (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
     a.href = url;
     a.download = nombre;
     document.body.appendChild(a);
@@ -1244,16 +1282,22 @@ function pintarTriggers() {
   else { par('calTriggerDesde', 'calTxtDesde', true); par('calTriggerHasta', 'calTxtHasta', false); }
 }
 
+function calpSoloMes() {
+  return calpModo === 'exp' && /NOMINAL_TRAMA_NUEVO/i.test(state.expTable);
+}
+
 function renderCalPeriodo(silencioso) {
   const box = $('calPop');
   if (!box) return;
   const mm = calpMapear();
   if (!mm.tieneDia && !mm.tieneMes && !mm.tieneAnio) { box.style.display = 'none'; calpAbierto = false; return; }
+  const soloMes = calpSoloMes();
 
   const now = new Date();
   if (calP.vista === 'dias' && !mm.tieneDia) calP.vista = mm.tieneMes ? 'meses' : 'anios';
   if (!mm.tieneMes && calP.vista === 'meses') calP.vista = mm.tieneDia ? 'dias' : 'anios';
   if (!mm.tieneAnio && calP.vista === 'anios') calP.vista = mm.tieneDia ? 'dias' : 'meses';
+  if (soloMes) calP.vista = 'meses';
 
   const ancla = calpObjetivo === 'hasta' && calpR.from ? calpR.from : (calpR.from || calpR.to || now);
   if (calP.m == null) { calP.m = ancla.getMonth() + 1; calP.a = ancla.getFullYear(); }
@@ -1284,8 +1328,8 @@ function renderCalPeriodo(silencioso) {
   html += '</div></div>';
 
   html += '<div class="calp-toolbar">' +
-    `<button type="button" class="calp-tool primary" data-calhoy="1">Hoy</button>` +
-    (mm.tieneDia ? `<button type="button" class="calp-tool" data-calmesc="1">Todo el mes</button>` : '') +
+    (soloMes ? '' : `<button type="button" class="calp-tool primary" data-calhoy="1">Hoy</button>`) +
+    (mm.tieneDia && !soloMes ? `<button type="button" class="calp-tool" data-calmesc="1">Todo el mes</button>` : '') +
     '<button type="button" class="calp-tool" data-callimpia="1">Limpiar</button>' +
     '</div>';
 
@@ -1366,7 +1410,17 @@ function calpAbrir(objetivo, trig) {
   const r = trig.getBoundingClientRect();
   box.style.display = 'block';
   box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 336)) + 'px';
-  box.style.top = (r.bottom + 6) + 'px';
+  const bh = box.offsetHeight;
+  const gap = 6;
+  let top;
+  if (r.top - gap >= bh) {
+    top = r.top - bh - gap;
+  } else {
+    top = r.bottom + gap;
+  }
+  if (top + bh > window.innerHeight - gap) top = Math.max(gap, window.innerHeight - bh - gap);
+  top = Math.max(gap, top);
+  box.style.top = top + 'px';
   calpAbierto = true;
 }
 
@@ -1385,7 +1439,7 @@ function calpIrAAnio() {
   if (n > ahora.getFullYear()) { alert('No se permiten años posteriores a ' + ahora.getFullYear() + '.'); return; }
   const mm = calpMapear();
   calP.a = n;
-  calP.vista = mm.tieneDia ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
+  calP.vista = mm.tieneDia && !calpSoloMes() ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
   renderCalPeriodo(true);
 }
 
@@ -1417,7 +1471,7 @@ $('calPop').addEventListener('click', (e) => {
   if (t.dataset.calmesEl !== undefined) {
     const nm = Number(t.dataset.calmesEl);
     const mm = calpMapear();
-    if (mm.tieneDia) { calP.m = nm; calP.vista = 'dias'; renderCalPeriodo(true); return; }
+    if (mm.tieneDia && !calpSoloMes()) { calP.m = nm; calP.vista = 'dias'; renderCalPeriodo(true); return; }
     const ahora = new Date();
     const f = new Date(calP.a, nm - 1, 1);
     calpR.from = f;
@@ -1433,7 +1487,7 @@ $('calPop').addEventListener('click', (e) => {
     const na = Number(t.dataset.calanioEl);
     const mm = calpMapear();
     calP.a = na;
-    calP.vista = mm.tieneDia ? 'dias' : 'meses';
+    calP.vista = mm.tieneDia && !calpSoloMes() ? 'dias' : 'meses';
     renderCalPeriodo(true);
     return;
   }
@@ -1472,7 +1526,7 @@ $('calPop').addEventListener('click', (e) => {
   if (t.dataset.calHoyAño !== undefined) {
     const mm = calpMapear();
     calP.a = new Date().getFullYear();
-    calP.vista = mm.tieneDia ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
+    calP.vista = mm.tieneDia && !calpSoloMes() ? 'dias' : (mm.tieneAnio ? 'meses' : 'anios');
     renderCalPeriodo(true);
     return;
   }
@@ -1506,10 +1560,126 @@ function renderExpRango() {
   const rg = $('calRangoExp');
   const lbl = $('lblCalRangoExp');
   if (!rg || !lbl) return;
-  const visible = !!state.expTable && expTienePeriodo();
-  rg.hidden = !visible;
-  lbl.hidden = !visible;
+  const esNomNuevo = /NOMINAL_TRAMA_NUEVO/i.test(state.expTable || '');
+  const base = !!state.expTable && expTienePeriodo() && !expTieneFecha();
+  rg.hidden = !(base && !esNomNuevo);
+  lbl.hidden = !(base && !esNomNuevo);
+  renderExpPeriodo(base && esNomNuevo);
+  renderExpFecha();
 }
+
+function renderExpPeriodo(visible) {
+  const pg = $('calPeriodoExp');
+  const lbl = $('lblCalPeriodoExp');
+  if (!pg || !lbl) return;
+  pg.hidden = !visible;
+  lbl.hidden = !visible;
+  if (visible) poblarExpPeriodo();
+  else expPerOff();
+}
+
+function poblarExpPeriodo() {
+  const selA = $('expSelAnio'), selM = $('expSelMes');
+  const cb = $('expPerOn');
+  if (!selA || !selM) return;
+  const hoy = new Date();
+  const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+  if (!selA.options.length) {
+    selA.innerHTML = aniosDisponibles().map((y) => `<option value="${y}">${y}</option>`).join('');
+    selM.innerHTML = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+  }
+  selA.value = String(curY);
+  selM.value = String(curM);
+  actualizarExpMeses();
+  if (cb) cb.checked = true;
+  selA.disabled = false;
+  selM.disabled = false;
+  expPeriodoAplicar();
+}
+
+function expPerOff() {
+  const cb = $('expPerOn');
+  const selA = $('expSelAnio'), selM = $('expSelMes');
+  if (cb) cb.checked = false;
+  if (selA) selA.disabled = true;
+  if (selM) selM.disabled = true;
+  expState.filtros = [];
+}
+
+function actualizarExpMeses() {
+  const hoy = new Date();
+  const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+  const selA = $('expSelAnio'), selM = $('expSelMes');
+  if (!selA || !selM) return;
+  const a = Number(selA.value);
+  Array.from(selM.options).forEach((o) => { o.disabled = a === curY && Number(o.value) > curM; });
+  const sel = selM.selectedOptions[0];
+  if (sel && sel.disabled) selM.value = String(curM);
+}
+
+function expPeriodoAplicar() {
+  const meta = expState.meta || [];
+  const findCol = (re) => { const c = meta.find((x) => re.test(x.nombre)); return c ? c.nombre : null; };
+  const nomMes = findCol(/^(mes|mesl)$/i) || 'Mes';
+  const nomAnio = findCol(/^(anio|año)$/i) || 'Anio';
+  const m = $('expSelMes').value, a = $('expSelAnio').value;
+  expState.filtros = [
+    { columna: nomMes, valor: String(m) },
+    { columna: nomAnio, valor: String(a) },
+  ];
+}
+
+const TIPOS_FECHA = ['date', 'datetime', 'smalldatetime', 'datetime2', 'datetimeoffset'];
+function expColFecha() {
+  const m = expState.meta || [];
+  return m.find((c) => TIPOS_FECHA.includes(String(c.tipo).toLowerCase()) || /fecha/i.test(c.nombre)) || null;
+}
+function expTieneFecha() {
+  return !!state.expTable && /VRS_2026/i.test(state.expTable) && !!expColFecha();
+}
+function renderExpFecha() {
+  const box = $('calFechaExp');
+  const lbl = $('lblCalFechaExp');
+  if (!box || !lbl) return;
+  const visible = expTieneFecha();
+  box.hidden = !visible;
+  lbl.hidden = !visible;
+  if (visible) {
+    const col = expColFecha();
+    lbl.textContent = 'Filtrar por ' + col.nombre;
+  }
+  if (!visible) expFecLimpiar(true);
+}
+function expFecLimpiar(soloFiltros) {
+  if (!soloFiltros) {
+    const ds = $('expFecDesde'), dh = $('expFecHasta');
+    if (ds) ds.value = '';
+    if (dh) dh.value = '';
+  }
+  const col = expColFecha();
+  if (!col) return;
+  expState.filtros = expState.filtros.filter((f) => !impName(f.columna, col.nombre));
+}
+function expFecAplicar() {
+  const col = expColFecha();
+  if (!col) return;
+  const ds = $('expFecDesde').value, dh = $('expFecHasta').value;
+  expState.filtros = expState.filtros.filter((f) => !impName(f.columna, col.nombre));
+  if (ds && dh) {
+    if (ds > dh) { alert('La fecha inicio no puede ser despues de la fecha fin.'); $('expFecDesde').value = ''; $('expFecHasta').value = ''; return; }
+    expState.filtros.push({ columna: col.nombre, desde: ds, hasta: dh });
+  }
+}
+$('expFecDesde').addEventListener('change', expFecAplicar);
+$('expFecHasta').addEventListener('change', expFecAplicar);
+$('expFecLimpia').addEventListener('click', () => { expFecLimpiar(); });
+$('expSelMes').addEventListener('change', expPeriodoAplicar);
+$('expSelAnio').addEventListener('change', () => { actualizarExpMeses(); expPeriodoAplicar(); });
+$('expPerLimpia').addEventListener('click', () => { poblarExpPeriodo(); });
+$('expPerOn').addEventListener('change', () => {
+  if ($('expPerOn').checked) { $('expSelMes').disabled = false; $('expSelAnio').disabled = false; expPeriodoAplicar(); }
+  else { $('expSelMes').disabled = true; $('expSelAnio').disabled = true; expState.filtros = []; }
+});
 
 async function onExpTable(tabla) {
   state.expTable = tabla;

@@ -21,6 +21,8 @@ db.deleteRecomendacion('dbo.NOMINAL_TRAMA_NUEVO');
 
 const wrap = (fn) => (req, res) => fn(req, res).catch((e) => res.status(500).json({ ok: false, error: e.message }));
 
+const EXTRA_TABLAS = ['dbEstrategias.INM.VRS_2026'];
+
 async function getKeyMarkers(pool, schema, table) {
   const r = await pool.request()
     .input('s', sql.NVarChar, schema)
@@ -90,7 +92,7 @@ async function getUniqueIdxCols(pool, schema, table) {
 app.get('/api/tablas/visibilidad', wrap(async (req, res) => {
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
-    const all = await imp.listTables(pool);
+    const all = (await imp.listTables(pool)).concat(EXTRA_TABLAS);
     const ocultas = db.getTablasOcultas();
     const tablas = all.map((t) => ({ tabla: t, visible: !ocultas.has(t) }));
     const visibles = tablas.filter((t) => t.visible).map((t) => t.tabla);
@@ -101,21 +103,23 @@ app.get('/api/tablas/visibilidad', wrap(async (req, res) => {
 app.get('/api/tablas', wrap(async (req, res) => {
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
-    const all = await imp.listTables(pool);
+    const all = (await imp.listTables(pool)).concat(EXTRA_TABLAS);
     const ocultas = db.getTablasOcultas();
     res.json({ ok: true, tablas: all.filter((t) => !ocultas.has(t)) });
   } finally { await pool.close(); }
 }));
 
 app.post('/api/tablas/visibilidad', wrap(async (req, res) => {
-  const [schema, table] = imp.splitTable(req.body.tabla || '');
+  const [db, schema, table] = imp.splitTabla(req.body.tabla || '');
+  const sc = db ? `${db}.${schema}` : schema;
   const visible = req.body.visible !== false && req.body.visible !== 'false';
-  db.setTablaVisible(schema, table, !!visible);
-  res.json({ ok: true, tabla: `${schema}.${table}`, visible: !!visible });
+  db.setTablaVisible(sc, table, !!visible);
+  res.json({ ok: true, tabla: `${sc}.${table}`, visible: !!visible });
 }));
 
 app.get('/api/columnas', wrap(async (req, res) => {
-  const [schema, table] = imp.splitTable(req.query.tabla || '');
+  const [db, schema, table] = imp.splitTabla(req.query.tabla || '');
+  if (db) throw new Error(`La tabla '${db}.${schema}.${table}' es de otra base: solo se puede exportar, no importar.`);
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
     const markers = await getKeyMarkers(pool, schema, table);
@@ -182,7 +186,8 @@ async function analizarUnicidad(pool, schema, table, columns) {
 }
 
 app.get('/api/analizar', wrap(async (req, res) => {
-  const [schema, table] = imp.splitTable(req.query.tabla || '');
+  const [db, schema, table] = imp.splitTabla(req.query.tabla || '');
+  if (db) throw new Error(`La tabla '${db}.${schema}.${table}' es de otra base: solo se puede exportar, no importar.`);
   const tabla = `${schema}.${table}`;
   const cacheado = db.getRecomendacion(tabla);
   if (cacheado) return res.json({ ok: true, ...cacheado, cache: true });
@@ -218,12 +223,13 @@ app.delete('/api/favoritos/:id', wrap(async (req, res) => {
 }));
 
 app.get('/api/vista', wrap(async (req, res) => {
-  const [schema, table] = imp.splitTable(req.query.tabla || '');
+  const [db, schema, table] = imp.splitTabla(req.query.tabla || '');
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
-    const columns = await imp.getTableColumns(pool, schema, table);
+    const columns = await imp.getTableColumns(pool, schema, table, db);
     const filtros = parseFiltrosParam(req.query.f, columns);
-    const quals = `${imp.br(schema)}.${imp.br(table)}`;
+    const dbp = db ? `[${db}].` : '';
+    const quals = `${dbp}${imp.br(schema)}.${imp.br(table)}`;
     if (filtros.length) {
       const req = pool.request();
       const where = ' WHERE ' + filtroWhere(filtros, req);
@@ -232,44 +238,91 @@ app.get('/api/vista', wrap(async (req, res) => {
       const r = await req.query(`SELECT TOP (10) * FROM ${quals}${where};`);
       res.json({ ok: true, total, columnas: columns.map((c) => c.COLUMN_NAME), filas: r.recordset });
     } else {
-      const countR = await pool.request().input('t', sql.NVarChar, `${schema}.${table}`)
-        .query('SELECT SUM(p.rows) AS total FROM sys.partitions p WHERE p.object_id = OBJECT_ID(@t) AND p.index_id IN (0,1);');
-      const total = countR.recordset[0].total || 0;
+      let total = 0;
+      if (db) {
+        const c = await pool.request().query(`SELECT COUNT(*) AS n FROM ${quals};`);
+        total = c.recordset[0].n || 0;
+      } else {
+        const countR = await pool.request().input('t', sql.NVarChar, `${schema}.${table}`)
+          .query('SELECT SUM(p.rows) AS total FROM sys.partitions p WHERE p.object_id = OBJECT_ID(@t) AND p.index_id IN (0,1);');
+        total = countR.recordset[0].total || 0;
+      }
       const r = await pool.request().query(`SELECT TOP (10) * FROM ${quals};`);
       res.json({ ok: true, total, columnas: columns.map((c) => c.COLUMN_NAME), filas: r.recordset });
     }
   } finally { await pool.close(); }
 }));
 
+const EXP_CSV_CELLS = 500000;
+const csvCell = (v) => {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
 app.get('/api/exportar', wrap(async (req, res) => {
-  const [schema, table] = imp.splitTable(req.query.tabla || '');
+  const [db, schema, table] = imp.splitTabla(req.query.tabla || '');
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
-    const columns = await imp.getTableColumns(pool, schema, table);
+    const columns = await imp.getTableColumns(pool, schema, table, db);
     const filtros = parseFiltrosParam(req.query.f, columns);
-    const quals = `${imp.br(schema)}.${imp.br(table)}`;
-    let total = 0;
+    const dbp = db ? `[${db}].` : '';
+    const quals = `${dbp}${imp.br(schema)}.${imp.br(table)}`;
+    const reqC = pool.request();
+    const whereC = filtros.length ? ' WHERE ' + filtroWhere(filtros, reqC) : '';
+    const c = await reqC.query(`SELECT COUNT(*) AS n FROM ${quals}${whereC};`);
+    const total = c.recordset[0].n || 0;
+    const fname = `${table}_${new Date().toISOString().slice(0, 10)}`;
+
+    const forzarCsv = String(req.query.fmt || '').toLowerCase() === 'csv';
+    const grande = forzarCsv || total * columns.length > EXP_CSV_CELLS;
+    if (grande) {
+      let aborted = false;
+      res.on('close', () => { aborted = true; });
+      res.on('error', () => { aborted = true; });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${fname}.csv"`);
+      res.setHeader('X-Total-Filas', String(total));
+      res.setHeader('X-Exportadas', '');
+      res.write('\uFEFF');
+      res.write(columns.map((x) => csvCell(x.COLUMN_NAME)).join(';') + '\n');
+      const CHUNK = 5000;
+      let offset = 0;
+      while (true) {
+        if (aborted) return;
+        const rr = pool.request();
+        const whereX = filtros.length ? ' WHERE ' + filtroWhere(filtros, rr) : '';
+        const sql2 = `SELECT * FROM ${quals}${whereX} ORDER BY (SELECT NULL) OFFSET ${offset} ROWS FETCH NEXT ${CHUNK} ROWS ONLY;`;
+        const r2 = await rr.query(sql2);
+        const rows = r2.recordset;
+        if (!rows.length) break;
+        let out = '';
+        for (const row of rows) out += columns.map((x) => csvCell(row[x.COLUMN_NAME])).join(';') + '\n';
+        if (aborted) return;
+        res.write(out);
+        offset += rows.length;
+        if (rows.length < CHUNK) break;
+      }
+      if (!aborted) res.end();
+      return;
+    }
+
     let recordset = null;
     if (filtros.length) {
-      const req = pool.request();
-      const where = ' WHERE ' + filtroWhere(filtros, req);
-      const c = await req.query(`SELECT COUNT(*) AS n FROM ${quals}${where};`);
-      total = c.recordset[0].n || 0;
-      const r = await req.query(`SELECT * FROM ${quals}${where};`);
-      recordset = r.recordset;
+      const reqX = pool.request();
+      const whereX = ' WHERE ' + filtroWhere(filtros, reqX);
+      const rx = await reqX.query(`SELECT * FROM ${quals}${whereX};`);
+      recordset = rx.recordset;
     } else {
-      const countR = await pool.request().input('t', sql.NVarChar, `${schema}.${table}`)
-        .query('SELECT SUM(p.rows) AS total FROM sys.partitions p WHERE p.object_id = OBJECT_ID(@t) AND p.index_id IN (0,1);');
-      total = countR.recordset[0].total || 0;
-      const r = await pool.request().query(`SELECT * FROM ${quals};`);
-      recordset = r.recordset;
+      const rx = await pool.request().query(`SELECT * FROM ${quals};`);
+      recordset = rx.recordset;
     }
     const ws = XLSX.utils.json_to_sheet(recordset, { header: columns.map((c) => c.COLUMN_NAME) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Datos');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${table}_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}.xlsx"`);
     res.setHeader('X-Total-Filas', String(total));
     res.setHeader('X-Exportadas', String(recordset.length));
     res.send(buf);
@@ -1093,17 +1146,24 @@ async function cargarRapido({ req, schema, table, columns, filtros, reemplazar, 
 }
 
 app.get('/api/filtros', wrap(async (req, res) => {
-  const [schema, table] = imp.splitTable(req.query.tabla || '');
-  const tabla = `${schema}.${table}`;
+  const [db, schema, table] = imp.splitTabla(req.query.tabla || '');
+  const tabla = `${db ? db + '.' : ''}${schema}.${table}`;
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
-    const columns = await imp.getTableColumns(pool, schema, table);
-    const qual = `${imp.br(schema)}.${imp.br(table)}`;
+    const columns = await imp.getTableColumns(pool, schema, table, db);
+    const dbp = db ? `[${db}].` : '';
+    const qual = `${dbp}${imp.br(schema)}.${imp.br(table)}`;
     const sugeridos = columns.map((c) => c.COLUMN_NAME).filter((n) => SUG_PAT.test(n)).slice(0, 10);
 
-    const szR = await pool.request().input('q', sql.NVarChar, qual)
-      .query('SELECT SUM(p.rows) AS n FROM sys.partitions p WHERE p.object_id = OBJECT_ID(@q) AND p.index_id IN (0,1);');
-    const totalFilas = szR.recordset[0].n || 0;
+    let totalFilas = 0;
+    if (db) {
+      const szR = await pool.request().query(`SELECT COUNT(*) AS n FROM ${qual};`);
+      totalFilas = szR.recordset[0].n || 0;
+    } else {
+      const szR = await pool.request().input('q', sql.NVarChar, qual)
+        .query('SELECT SUM(p.rows) AS n FROM sys.partitions p WHERE p.object_id = OBJECT_ID(@q) AND p.index_id IN (0,1);');
+      totalFilas = szR.recordset[0].n || 0;
+    }
     const grande = totalFilas > 300000;
 
     const pedida = String(req.query.col || '').trim();
@@ -1148,6 +1208,25 @@ app.get('/api/filtros', wrap(async (req, res) => {
       count,
       filtros: filtros.map((f) => f.desde !== undefined ? { columna: f.meta.COLUMN_NAME, desde: f.desde, hasta: f.hasta } : { columna: f.meta.COLUMN_NAME, valor: f.valor }),
     });
+  } finally { await pool.close(); }
+}));
+
+app.post('/api/ejecutar-sp', wrap(async (req, res) => {
+  const sp = String(req.body.sp || '').trim();
+  const tabla = String(req.body.tabla || '').trim();
+  if (!sp) throw new Error('Falta el nombre del procedimiento.');
+  if (!/^[A-Za-z0-9_][A-Za-z0-9_.]*$/.test(sp)) throw new Error('Procedimiento invalido.');
+  const pool = await new sql.ConnectionPool(getConfig()).connect();
+  try {
+    await pool.request().query(`EXEC ${sp};`);
+    let filas = 0;
+    if (tabla) {
+      const [db, schema, table] = imp.splitTabla(tabla);
+      const dbp = db ? `[${db}].` : '';
+      const r = await pool.request().query(`SELECT COUNT(*) AS n FROM ${dbp}${imp.br(schema)}.${imp.br(table)};`);
+      filas = r.recordset[0].n || 0;
+    }
+    res.json({ ok: true, filas });
   } finally { await pool.close(); }
 }));
 
