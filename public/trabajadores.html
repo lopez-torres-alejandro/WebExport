@@ -47,10 +47,40 @@
   .calp-rango input[type=date]:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
   .calp-trigger{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;padding:10px 12px;background:#fff;border:1.5px dashed #c7d2fe;border-radius:12px;color:#3730a3;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
   .calp-trigger:hover{background:#eef2ff;border-color:#818cf8}
+  .calp-trigger[hidden]{display:none}
+  .calp-trigger.calp-mini{flex:0 0 auto;padding:5px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px;font-weight:600;gap:6px}
+  .calp-trigger.calp-mini:hover{background:#eef2ff;border-color:#c7d2fe;color:#4f46e5}
+  .calp-trigger.calp-mini .calp-ic{width:14px;height:14px;color:#94a3b8}
+  .calp-trigger.calp-mini .calp-chev{width:12px;height:12px;color:#94a3b8;margin-left:2px}
+  .calp-col-fecha{display:flex;flex-direction:column;gap:8px;flex:1 1 0;min-width:0}
+  .rapido-mes{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rapido-tit{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px}
+  .rapido-pills{display:flex;gap:4px;flex-wrap:wrap}
+  .pill-mes{padding:3px 9px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-size:11.5px;font-weight:600;cursor:pointer}
+  .pill-mes:hover{border-color:#818cf8;color:#4f46e5}
+  .pill-mes.on{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .pill-mes:disabled{opacity:.45;cursor:not-allowed}
   .calp-trigger.set{border-style:solid;border-color:#10b981;background:#f0fdf4;color:#065f46}
   .calp-guion{color:#94a3b8;font-weight:700;flex:none}
   .calp-x{flex:none;width:30px;height:30px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#94a3b8;font-size:16px;cursor:pointer;line-height:1}
   .calp-x:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626}
+  .periodo-grid{display:flex;gap:16px;align-items:stretch}
+  .periodo-col{display:flex;flex-direction:column;gap:5px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+  .periodo-tit{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .periodo-col label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#475569;font-weight:600}
+  .periodo-col select{padding:7px 9px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;color:#0f172a;min-width:86px}
+  .periodo-col select:disabled{background:#f1f5f9;color:#94a3b8}
+  .periodo-col select option:disabled{color:#94a3b8}
+  .calp-fecha{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:14px 0 2px}
+  .calp-fecha[hidden]{display:none}
+  .calp-head-row{display:flex;align-items:center;justify-content:space-between;width:100%}
+  .filtro-avanzado{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+  .periodo-col input[type=date]{padding:7px 9px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;color:#0f172a}
+  .periodo-col input[type=date]:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .modo-filtro{display:flex;gap:4px}
+  .modo-btn{padding:4px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#64748b;font-size:12px;font-weight:600;cursor:pointer}
+  .modo-btn:hover{border-color:#818cf8;color:#4f46e5}
+  .modo-btn.on{background:#4f46e5;border-color:#4f46e5;color:#fff}
   .calp-ic{color:#4f46e5;flex:none;width:18px;height:18px}
   .calp-pop{position:fixed;z-index:80;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:12px;min-width:252px}
   .calp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
@@ -120,22 +150,68 @@
       <button type="button" class="calp-x" id="expCalLimpia" title="Limpiar rango">&times;</button>
     </div>
 
-    <label id="lblCalFechaExp" for="expFecDesde" hidden>Filtrar por fecha de atencion</label>
+    <label id="lblCalFechaExp" for="expFecMes" hidden>Filtrar por fecha de atencion</label>
     <div class="calp-rango" id="calFechaExp" hidden>
-      <input type="date" id="expFecDesde" title="Fecha inicio">
-      <span class="calp-guion">–</span>
-      <input type="date" id="expFecHasta" title="Fecha fin">
+      <div class="calp-col-fecha">
+        <div class="rapido-mes" id="expFecRapido" hidden>
+          <span class="rapido-tit">Mes de este año</span>
+          <div class="rapido-pills" id="expFecPills"></div>
+        </div>
+        <div class="periodo-grid">
+          <div class="periodo-col">
+            <span class="periodo-tit">Fecha de inicio</span>
+            <label>Mes <select id="expFecMes" title="Mes de inicio"></select></label>
+            <label>Año <select id="expFecAnio" title="Año de inicio"></select></label>
+          </div>
+          <div class="periodo-col">
+            <span class="periodo-tit">Fecha final</span>
+            <label>Mes <select id="expFecMesHasta" title="Mes final"></select></label>
+            <label>Año <select id="expFecAnioHasta" title="Año final"></select></label>
+          </div>
+        </div>
+      </div>
       <button type="button" class="calp-x" id="expFecLimpia" title="Limpiar fechas">&times;</button>
     </div>
-
-    <label id="lblCalPeriodoExp" for="expPerOn" hidden>Periodo a exportar</label>
-    <div class="calp-rango" id="calPeriodoExp" hidden>
-      <label class="calp-check" title="Si se desmarca se exporta la tabla completa"><input type="checkbox" id="expPerOn" checked> Filtrar por mes/año</label>
-      <div class="periodo-fila">
-        <select id="expSelMes" title="Mes del periodo"></select>
-        <select id="expSelAnio" title="Año del periodo"></select>
+    <button type="button" class="calp-trigger calp-mini" id="expFecToggle" hidden>
+      <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>Filtro avanzado con días</span>
+      <svg class="calp-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="calp-fecha" id="expFecPanelDia" hidden>
+      <div class="periodo-grid">
+        <div class="periodo-col">
+          <span class="periodo-tit">Fecha de inicio</span>
+          <label>Día <input type="date" id="expFecDesde" title="Día de inicio"></label>
+        </div>
+        <div class="periodo-col">
+          <span class="periodo-tit">Fecha final</span>
+          <label>Día <input type="date" id="expFecHasta" title="Día final"></label>
+        </div>
       </div>
-      <button type="button" class="calp-x" id="expPerLimpia" title="Limpiar periodo">&times;</button>
+    </div>
+
+    <label id="lblCalPeriodoExp" for="expSelMes" hidden>Periodo a exportar</label>
+    <div class="calp-rango" id="calPeriodoExp" hidden>
+      <label class="calp-check" title="Marcar para exportar la tabla completa sin filtro"><input type="checkbox" id="expPerTodo"> Seleccionar todo</label>
+      <div class="calp-col-fecha">
+        <div class="rapido-mes" id="expPerRapido" hidden>
+          <span class="rapido-tit">Mes de este año</span>
+          <div class="rapido-pills" id="expPerPills"></div>
+        </div>
+        <div class="periodo-grid">
+          <div class="periodo-col">
+            <span class="periodo-tit">Fecha de inicio</span>
+            <label>Mes <select id="expSelMes" title="Mes de inicio del periodo"></select></label>
+            <label>Año <select id="expSelAnio" title="Año de inicio del periodo"></select></label>
+          </div>
+          <div class="periodo-col">
+            <span class="periodo-tit">Fecha final</span>
+            <label>Mes <select id="expSelMesHasta" title="Mes final del periodo"></select></label>
+            <label>Año <select id="expSelAnioHasta" title="Año final del periodo"></select></label>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="calp-x" id="expPerLimpia" title="Restaurar el periodo por defecto">&times;</button>
     </div>
 
     <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
@@ -144,7 +220,7 @@
     </div>
     <div class="result" id="resultado"></div>
 
-    <div class="nota">Para NOMINAL_TRAMA_NUEVO se elige el mes y el año a exportar. Para VRS_2026 se muestran los campos de fecha y el sistema ejecuta el reporte (INM.ps_VRS_2026) antes de exportar.</div>
+    <div class="nota">Para NOMINAL_TRAMA_NUEVO se elige el mes y el año a exportar. Para VRS_2026 se muestran los campos de fecha y el sistema ejecuta el reporte (dbEstrategias.INM.ps_VRS_2026) antes de exportar.</div>
   </div>
 </div>
 
@@ -161,6 +237,11 @@
     try { j = await r.json(); } catch (_) { j = { ok: false, error: 'Respuesta invalida del servidor' }; }
     if (!j.ok) throw new Error(j.error || 'Error del servidor');
     return j;
+  }
+  function fmtDur(ms) {
+    const s = Math.round(Number(ms) / 1000);
+    const m = Math.floor(s / 60);
+    return m > 0 ? m + ' min ' + (s % 60) + ' s' : s + ' s';
   }
 
   const state = { expTable: '' };
@@ -235,76 +316,110 @@
     if (!pg || !lbl) return;
     pg.hidden = !visible;
     lbl.hidden = !visible;
-    if (visible) poblarExpPeriodo();
+    if (visible) { poblarExpPeriodo(); expPerRapidoRender(); }
     else expPerOff();
   }
   function poblarExpPeriodo() {
-    const selA = $('expSelAnio'), selM = $('expSelMes');
-    const cb = $('expPerOn');
-    if (!selA || !selM) return;
+    const selA = $('expSelAnio'), selAH = $('expSelAnioHasta'), selM = $('expSelMes'), selMH = $('expSelMesHasta');
+    if (!selA || !selAH || !selM || !selMH) return;
     const hoy = new Date();
     const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
     if (!selA.options.length) {
-      let opts = '';
-      for (let y = curY; y >= Math.max(2020, curY - 6); y--) opts += `<option value="${y}">${y}</option>`;
-      selA.innerHTML = opts;
-      selM.innerHTML = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+      let anios = '';
+      for (let y = curY; y >= Math.max(2020, curY - 6); y--) anios += `<option value="${y}">${y}</option>`;
+      selA.innerHTML = anios;
+      selAH.innerHTML = anios;
+      const meses = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+      selM.innerHTML = meses;
+      selMH.innerHTML = meses;
     }
-    selA.value = String(curY);
-    selM.value = String(curM);
+    const iniY = Math.min(...Array.from(selA.options).map((o) => Number(o.value)));
+    selA.value = String(Math.max(2023, iniY));
+    selAH.value = String(curY);
+    selM.value = '1';
+    selMH.value = String(curM);
     actualizarExpMeses();
-    if (cb) cb.checked = true;
+    const cb = $('expPerTodo');
+    if (cb) cb.checked = false;
     selA.disabled = false;
+    selAH.disabled = false;
     selM.disabled = false;
+    selMH.disabled = false;
     expPeriodoAplicar();
   }
   function expPerOff() {
-    const cb = $('expPerOn');
-    const selA = $('expSelAnio'), selM = $('expSelMes');
+    const cb = $('expPerTodo');
+    const selA = $('expSelAnio'), selAH = $('expSelAnioHasta'), selM = $('expSelMes'), selMH = $('expSelMesHasta');
     if (cb) cb.checked = false;
     if (selA) selA.disabled = true;
+    if (selAH) selAH.disabled = true;
     if (selM) selM.disabled = true;
+    if (selMH) selMH.disabled = true;
     expState.filtros = [];
   }
   function actualizarExpMeses() {
     const hoy = new Date();
     const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
-    const selA = $('expSelAnio'), selM = $('expSelMes');
-    if (!selA || !selM) return;
-    const a = Number(selA.value);
-    Array.from(selM.options).forEach((o) => { o.disabled = a === curY && Number(o.value) > curM; });
-    const sel = selM.selectedOptions[0];
-    if (sel && sel.disabled) selM.value = String(curM);
+    const selAH = $('expSelAnioHasta'), selM = $('expSelMes'), selMH = $('expSelMesHasta');
+    if (!selAH || !selM || !selMH) return;
+    const a = Number(selAH.value);
+    Array.from(selM.options).forEach((o) => { o.disabled = false; });
+    Array.from(selMH.options).forEach((o) => { o.disabled = a === curY && Number(o.value) > curM; });
+    const s2 = selMH.selectedOptions[0];
+    if (s2 && s2.disabled) selMH.value = String(curM);
   }
   function expPeriodoAplicar() {
     const meta = expState.meta || [];
     const findCol = (re) => { const c = meta.find((x) => re.test(x.nombre)); return c ? c.nombre : null; };
     const nomMes = findCol(/^(mes|mesl)$/i) || 'Mes';
     const nomAnio = findCol(/^(anio|año)$/i) || 'Anio';
-    const m = $('expSelMes').value, a = $('expSelAnio').value;
+    const cb = $('expPerTodo');
+    if (cb && cb.checked) { expState.filtros = []; expPerRapidoActualizar(); return; }
+    let d = Number($('expSelMes').value), h = Number($('expSelMesHasta').value);
+    if (d > h) { const t = d; d = h; h = t; }
+    let ad = Number($('expSelAnio').value), ah = Number($('expSelAnioHasta').value);
+    if (ad > ah) { const t = ad; ad = ah; ah = t; }
     expState.filtros = [
-      { columna: nomMes, valor: String(m) },
-      { columna: nomAnio, valor: String(a) },
+      { columna: nomMes, desde: String(d), hasta: String(h) },
+      { columna: nomAnio, desde: String(ad), hasta: String(ah) },
     ];
+    expPerRapidoActualizar();
   }
   function renderExpFecha() {
     const box = $('calFechaExp');
+    const trig = $('expFecToggle');
     const lbl = $('lblCalFechaExp');
     if (!box || !lbl) return;
     const visible = expTieneFecha();
-    box.hidden = !visible;
+    if (trig) trig.hidden = !visible;
     lbl.hidden = !visible;
     if (visible) {
       const col = expColFecha();
       lbl.textContent = 'Filtrar por ' + col.nombre;
+      box.hidden = false;
+      const dia = $('expFecPanelDia');
+      if (dia) dia.hidden = true;
+      expFecSetBloqueo(false);
+      poblarExpFecMeses();
+      expFecRapidoRender();
+      expFecAplicar();
+    } else {
+      box.hidden = true;
+      const dia = $('expFecPanelDia');
+      if (dia) dia.hidden = true;
+      expFecSetBloqueo(false);
+      expFecLimpiar(true);
     }
-    if (!visible) expFecLimpiar(true);
   }
   function expFecLimpiar(soloFiltros) {
     if (!soloFiltros) {
       const ds = $('expFecDesde'), dh = $('expFecHasta');
       if (ds) ds.value = '';
       if (dh) dh.value = '';
+      const dia = $('expFecPanelDia');
+      if (dia) dia.hidden = true;
+      expFecSetBloqueo(false);
+      poblarExpFecMeses();
     }
     const col = expColFecha();
     if (!col) return;
@@ -313,22 +428,173 @@
   function expFecAplicar() {
     const col = expColFecha();
     if (!col) return;
-    const ds = $('expFecDesde').value, dh = $('expFecHasta').value;
     expState.filtros = expState.filtros.filter((f) => !impName(f.columna, col.nombre));
-    if (ds && dh) {
+    const diaAbierto = !!$('expFecPanelDia') && !$('expFecPanelDia').hidden;
+    const ds = $('expFecDesde').value, dh = $('expFecHasta').value;
+    if (diaAbierto && ds && dh) {
       if (ds > dh) { alert('La fecha inicio no puede ser despues de la fecha fin.'); $('expFecDesde').value = ''; $('expFecHasta').value = ''; return; }
       expState.filtros.push({ columna: col.nombre, desde: ds, hasta: dh });
+      return;
     }
+    const sM = $('expFecMes'), sMH = $('expFecMesHasta'), sA = $('expFecAnio'), sAH = $('expFecAnioHasta');
+    if (!sM || !sMH || !sA || !sAH) return;
+    const md = Math.min(Number(sM.value), Number(sMH.value));
+    const mh = Math.max(Number(sM.value), Number(sMH.value));
+    const ad = Math.min(Number(sA.value), Number(sAH.value));
+    const ah = Math.max(Number(sA.value), Number(sAH.value));
+const desde = ad + '-' + String(md).padStart(2, '0') + '-01';
+      const hasta = new Date(ah, mh, 0).toISOString().slice(0, 10);
+      expState.filtros.push({ columna: col.nombre, desde, hasta });
+      expFecRapidoActualizar();
+    }
+  function poblarExpFecMeses() {
+    const sA = $('expFecAnio'), sAH = $('expFecAnioHasta'), sM = $('expFecMes'), sMH = $('expFecMesHasta');
+    if (!sA || !sAH || !sM || !sMH) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    if (!sA.options.length) {
+      let anios = '';
+      for (let y = curY; y >= Math.max(2020, curY - 6); y--) anios += `<option value="${y}">${y}</option>`;
+      sA.innerHTML = anios;
+      sAH.innerHTML = anios;
+      const meses = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+      sM.innerHTML = meses;
+      sMH.innerHTML = meses;
+    }
+    const iniY = Math.min(...Array.from(sA.options).map((o) => Number(o.value)));
+    sA.value = String(Math.max(2023, iniY));
+    sAH.value = String(curY);
+    sM.value = '1';
+    sMH.value = String(curM);
+    actualizarExpFecMeses();
   }
+  function actualizarExpFecMeses() {
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    const sA = $('expFecAnio'), sAH = $('expFecAnioHasta'), sM = $('expFecMes'), sMH = $('expFecMesHasta');
+    if (!sA || !sAH || !sM || !sMH) return;
+    Array.from(sM.options).forEach((o) => { o.disabled = Number(sA.value) === curY && Number(o.value) > curM; });
+    Array.from(sMH.options).forEach((o) => { o.disabled = Number(sAH.value) === curY && Number(o.value) > curM; });
+    const s1 = sM.selectedOptions[0], s2 = sMH.selectedOptions[0];
+    if (s1 && s1.disabled) sM.value = String(curM);
+    if (s2 && s2.disabled) sMH.value = String(curM);
+  }
+  function expFecRapidoRender() {
+    const wrap = $('expFecRapido');
+    const pills = $('expFecPills');
+    if (!wrap || !pills) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    wrap.hidden = false;
+    pills.innerHTML = NOM_MES.slice(0, curM).map((n, i) =>
+      `<button type="button" class="pill-mes" data-m="${i + 1}" title="Exportar ${n} ${curY}">${n}</button>`
+    ).join('');
+    expFecRapidoActualizar();
+  }
+  function expFecRapidoActualizar() {
+    const pills = $('expFecPills');
+    if (!pills) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear();
+    const m1 = Number($('expFecMes').value), m2 = Number($('expFecMesHasta').value);
+    const a1 = Number($('expFecAnio').value), a2 = Number($('expFecAnioHasta').value);
+    const soloMes = m1 === m2 && a1 === curY && a2 === curY;
+    Array.from(pills.querySelectorAll('.pill-mes')).forEach((b) => b.classList.toggle('on', soloMes && Number(b.dataset.m) === m1));
+  }
+  $('expFecPills').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-mes');
+    if (!b) return;
+    const m = Number(b.dataset.m);
+    const hoy = new Date();
+    $('expFecMes').value = String(m);
+    $('expFecMesHasta').value = String(m);
+    $('expFecAnio').value = String(hoy.getFullYear());
+    $('expFecAnioHasta').value = String(hoy.getFullYear());
+    actualizarExpFecMeses();
+    expFecAplicar();
+  });
+  function expFecSetBloqueo(bloqueado) {
+    ['expFecMes', 'expFecMesHasta', 'expFecAnio', 'expFecAnioHasta'].forEach((id) => {
+      const el = $('' + id);
+      if (el) el.disabled = bloqueado;
+    });
+    const pills = $('expFecPills');
+    if (pills) Array.from(pills.querySelectorAll('.pill-mes')).forEach((b) => { b.disabled = bloqueado; });
+  }
+  $('expFecToggle').addEventListener('click', () => {
+    const p = $('expFecPanelDia');
+    if (!p) return;
+    p.hidden = !p.hidden;
+    expFecSetBloqueo(!p.hidden);
+    expFecAplicar();
+  });
+  $('expFecMes').addEventListener('change', expFecAplicar);
+  $('expFecMesHasta').addEventListener('change', expFecAplicar);
+  $('expFecAnio').addEventListener('change', () => { actualizarExpFecMeses(); expFecAplicar(); });
+  $('expFecAnioHasta').addEventListener('change', () => { actualizarExpFecMeses(); expFecAplicar(); });
   $('expFecDesde').addEventListener('change', expFecAplicar);
   $('expFecHasta').addEventListener('change', expFecAplicar);
   $('expFecLimpia').addEventListener('click', () => { expFecLimpiar(); });
+  function expPerRapidoRender() {
+    const wrap = $('expPerRapido');
+    const pills = $('expPerPills');
+    if (!wrap || !pills) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    wrap.hidden = false;
+    pills.innerHTML = NOM_MES.slice(0, curM).map((n, i) =>
+      `<button type="button" class="pill-mes" data-m="${i + 1}" title="Exportar ${n} ${curY}">${n}</button>`
+    ).join('');
+    expPerRapidoActualizar();
+  }
+  function expPerRapidoActualizar() {
+    const pills = $('expPerPills');
+    if (!pills) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear();
+    const m1 = Number($('expSelMes').value), m2 = Number($('expSelMesHasta').value);
+    const a1 = Number($('expSelAnio').value), a2 = Number($('expSelAnioHasta').value);
+    const soloMes = m1 === m2 && a1 === curY && a2 === curY;
+    Array.from(pills.querySelectorAll('.pill-mes')).forEach((b) => b.classList.toggle('on', soloMes && Number(b.dataset.m) === m1));
+  }
+  $('expPerPills').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-mes');
+    if (!b) return;
+    const m = Number(b.dataset.m);
+    const hoy = new Date();
+    const cb = $('expPerTodo');
+    if (cb && cb.checked) cb.checked = false;
+    $('expSelMes').value = String(m);
+    $('expSelMesHasta').value = String(m);
+    $('expSelAnio').value = String(hoy.getFullYear());
+    $('expSelAnioHasta').value = String(hoy.getFullYear());
+    $('expSelMes').disabled = false;
+    $('expSelMesHasta').disabled = false;
+    $('expSelAnio').disabled = false;
+    $('expSelAnioHasta').disabled = false;
+    actualizarExpMeses();
+    expPeriodoAplicar();
+  });
   $('expSelMes').addEventListener('change', expPeriodoAplicar);
+  $('expSelMesHasta').addEventListener('change', expPeriodoAplicar);
   $('expSelAnio').addEventListener('change', () => { actualizarExpMeses(); expPeriodoAplicar(); });
+  $('expSelAnioHasta').addEventListener('change', () => { actualizarExpMeses(); expPeriodoAplicar(); });
   $('expPerLimpia').addEventListener('click', () => { poblarExpPeriodo(); });
-  $('expPerOn').addEventListener('change', () => {
-    if ($('expPerOn').checked) { $('expSelMes').disabled = false; $('expSelAnio').disabled = false; expPeriodoAplicar(); }
-    else { $('expSelMes').disabled = true; $('expSelAnio').disabled = true; expState.filtros = []; }
+  $('expPerTodo').addEventListener('change', () => {
+    const s1 = $('expSelMes'), s2 = $('expSelMesHasta'), sa = $('expSelAnio'), sah = $('expSelAnioHasta');
+    if ($('expPerTodo').checked) {
+      if (s1) s1.disabled = true;
+      if (s2) s2.disabled = true;
+      if (sa) sa.disabled = true;
+      if (sah) sah.disabled = true;
+      expState.filtros = [];
+    } else {
+      if (s1) s1.disabled = false;
+      if (s2) s2.disabled = false;
+      if (sa) sa.disabled = false;
+      if (sah) sah.disabled = false;
+      expPeriodoAplicar();
+    }
   });
 
   function expFstr() {
@@ -726,20 +992,25 @@
     const fstr = expFstr();
     const qf = fstr ? '&f=' + enc(fstr) : '';
     const enPeriodo = (expTienePeriodo() || expTieneFecha()) && fstr;
-    const esVRS = /dbEstrategias\.INM\.VRS_2026/i.test(t);
+    const esVRS = /INM\.VRS_2026$/i.test(t);
     const btn = $('btnExp');
     btn.disabled = true;
     btn.innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando Excel...';
     try {
       if (esVRS) {
         box.className = 'result ok'; box.style.display = 'block';
-        box.innerHTML = 'Ejecutando procedimiento <b>INM.ps_VRS_2026</b>...';
+        const spKey = 'spTiempo_dbEstrategias.INM.ps_VRS_2026';
+        const prevMs = Number(localStorage.getItem(spKey) || 0);
+        box.innerHTML = 'Ejecutando procedimiento <b>dbEstrategias.INM.ps_VRS_2026</b>...' +
+          (prevMs > 0 ? ' Ultima vez tardo: ~' + fmtDur(prevMs) + '.' : '');
         const g = await api('/api/ejecutar-sp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sp: 'dbEstrategias.INM.ps_VRS_2026', tabla: 'dbEstrategias.INM.VRS_2026' }),
         });
-        box.innerHTML = 'Reporte VRS generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas). Descargando Excel...';
+        if (g.durMs) localStorage.setItem(spKey, g.durMs);
+        box.innerHTML = 'Reporte VRS generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas)' +
+          (g.durMs ? ' en <b>' + fmtDur(g.durMs) + '</b>' : '') + '. Descargando Excel...';
       }
       const r = await fetch('/api/exportar?tabla=' + enc(t) + qf + '&fmt=csv');
       if (!r.ok) {

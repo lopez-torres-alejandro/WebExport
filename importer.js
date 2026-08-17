@@ -95,6 +95,13 @@ const listTables = async (pool) => {
   return r.recordset.map((x) => `${x.TABLE_SCHEMA}.${x.TABLE_NAME}`);
 };
 
+const listTablesDe = async (pool, db) => {
+  const r = await pool.request().query(
+    `SELECT TABLE_SCHEMA, TABLE_NAME FROM [${db}].INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME`
+  );
+  return r.recordset.map((x) => `${db}.${x.TABLE_SCHEMA}.${x.TABLE_NAME}`);
+};
+
 const getTableColumns = async (pool, schema, table, db) => {
   const dbp = db ? `[${db}].` : '';
   const objId = db ? `OBJECT_ID(@d + '.' + @s + '.' + @t)` : `OBJECT_ID(@s + '.' + @t)`;
@@ -217,6 +224,7 @@ const runImport = async (pool, schema, table, columns, keys, uniqueRows) => {
 module.exports = {
   getConfig,
   listTables,
+  listTablesDe,
   getTableColumns,
   readExcel,
   processRows,
