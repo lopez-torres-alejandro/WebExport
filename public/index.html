@@ -1178,7 +1178,7 @@ $('btnExp').addEventListener('click', async () => {
   const enPeriodo = (expTienePeriodo() || expTieneFecha()) && fstr;
   const esVRS = /INM\.VRS_2026$/i.test(t);
   $('btnExp').disabled = true;
-  $('btnExp').innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando Excel...';
+  $('btnExp').innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando CSV...';
   try {
 if (esVRS) {
       const spKey = 'spTiempo_dbEstrategias.INM.ps_VRS_2026';
@@ -1198,9 +1198,9 @@ if (esVRS) {
       const gj = await g.json();
       if (gj.durMs) localStorage.setItem(spKey, gj.durMs);
       box.innerHTML = `Reporte VRS generado (<b>${Number(gj.filas).toLocaleString()}</b> filas)` +
-        (gj.durMs ? ` en <b>${fmtDur(gj.durMs)}</b>` : '') + '. Descargando Excel...';
+        (gj.durMs ? ` en <b>${fmtDur(gj.durMs)}</b>` : '') + '. Descargando CSV...';
     }
-    const r = await fetch('/api/exportar?tabla=' + enc(t) + qf + (esVRS ? '&fmt=csv' : ''));
+    const r = await fetch('/api/exportar?tabla=' + enc(t) + qf + '&fmt=csv');
     if (!r.ok) {
       let msg = 'Error al exportar.';
       try { const j = await r.json(); msg = j.error || msg; } catch (_) {}
@@ -1211,7 +1211,7 @@ if (esVRS) {
     const exportadas = r.headers.get('X-Exportadas') || total;
     const cd = r.headers.get('Content-Disposition') || '';
     const fm = /filename="([^"]+)"/.exec(cd);
-    const nombre = fm ? fm[1] : (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    const nombre = fm ? fm[1] : (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.csv';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

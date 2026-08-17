@@ -120,7 +120,7 @@
     </div>
 
     <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
-      <button class="btn btn-green" id="btnExp">Descargar Excel</button>
+      <button class="btn btn-green" id="btnExp">Descargar CSV</button>
     </div>
     <div class="result" id="resultado"></div>
 
@@ -259,7 +259,7 @@
       });
       if (g.durMs) localStorage.setItem(spKey, g.durMs);
       box.innerHTML = 'Reporte generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas)' +
-        (g.durMs ? ' en <b>' + fmtDur(g.durMs) + '</b>' : '') + '. Descargando Excel...';
+        (g.durMs ? ' en <b>' + fmtDur(g.durMs) + '</b>' : '') + '. Descargando CSV...';
       let qf = '';
       if (filtro) qf = '&f=' + enc('fecha_atencion:' + filtro.desde + ':' + filtro.hasta);
       const r = await fetch('/api/exportar?tabla=' + enc(VRS) + qf + '&fmt=csv');
@@ -270,7 +270,9 @@
       }
       const blob = await r.blob();
       const exportadas = r.headers.get('X-Exportadas') || '?';
-      const nombre = 'VRS_2026_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+      const cd = r.headers.get('Content-Disposition') || '';
+      const fm = /filename="([^"]+)"/.exec(cd);
+      const nombre = fm ? fm[1] : 'VRS_2026_' + new Date().toISOString().slice(0, 10) + '.csv';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = nombre;
@@ -282,7 +284,7 @@
       box.innerHTML = esc(e.message);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = 'Descargar Excel';
+      btn.innerHTML = 'Descargar CSV';
     }
   });
 </script>

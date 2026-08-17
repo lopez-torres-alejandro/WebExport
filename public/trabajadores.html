@@ -995,7 +995,7 @@ const desde = ad + '-' + String(md).padStart(2, '0') + '-01';
     const esVRS = /INM\.VRS_2026$/i.test(t);
     const btn = $('btnExp');
     btn.disabled = true;
-    btn.innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando Excel...';
+    btn.innerHTML = esVRS ? '<span class="spinner"></span>Generando reporte VRS y exportando...' : '<span class="spinner"></span>Generando CSV...';
     try {
       if (esVRS) {
         box.className = 'result ok'; box.style.display = 'block';
@@ -1010,7 +1010,7 @@ const desde = ad + '-' + String(md).padStart(2, '0') + '-01';
         });
         if (g.durMs) localStorage.setItem(spKey, g.durMs);
         box.innerHTML = 'Reporte VRS generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas)' +
-          (g.durMs ? ' en <b>' + fmtDur(g.durMs) + '</b>' : '') + '. Descargando Excel...';
+          (g.durMs ? ' en <b>' + fmtDur(g.durMs) + '</b>' : '') + '. Descargando CSV...';
       }
       const r = await fetch('/api/exportar?tabla=' + enc(t) + qf + '&fmt=csv');
       if (!r.ok) {
@@ -1023,7 +1023,7 @@ const desde = ad + '-' + String(md).padStart(2, '0') + '-01';
       const exportadas = r.headers.get('X-Exportadas') || total;
       const cd = r.headers.get('Content-Disposition') || '';
       const fm = /filename="([^"]+)"/.exec(cd);
-      const nombre = fm ? fm[1] : (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+      const nombre = fm ? fm[1] : (t.split('.').pop() || t) + '_' + new Date().toISOString().slice(0, 10) + '.csv';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
