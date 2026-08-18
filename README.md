@@ -58,9 +58,3 @@ La conexion se configura en el archivo `.env`:
 | `DB_PASSWORD` | Clave del usuario |
 
 > **Nota:** No compartas el archivo `.env`, contiene credenciales.
-
----
-
-## Licencia
-
-Uso interno. Repositorio privado.
