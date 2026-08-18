@@ -1,6 +1,6 @@
-# WebExport - Reportes HIS (SQL Server)
+# WebExport
 
-Web app (Node.js) para importar/exportar datos de SQL Server (base de datos **dbEstrategias** / **dbHisminsa**, SQL Server 2025, contenedor sqlserver2025).
+Web app (Node.js) para importar y exportar datos desde/hacia SQL Server.
 
 ## Contenido
 
