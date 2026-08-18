@@ -23,8 +23,3 @@ npm start
 ```
 
 Configura la conexión copiando `.env.example` a `.env` y ajustando los valores (servidor, base de datos, usuario, clave).
-
-## Conexión
-
-- Servidor: `localhost:1434` (contenedor sqlserver2025)
-- Bases de datos: `dbHisminsa` (origen de datos), `dbEstrategias` (reportes)
