@@ -1,6 +1,15 @@
 # WebExport
 
-> Aplicación web para importar y exportar datos desde/hacia SQL Server.
+> Aplicacion web para importar y exportar datos desde/hacia SQL Server.
+
+## Lenguajes y tecnologias
+
+| Tecnologia | Uso |
+|------------|-----|
+| **JavaScript (Node.js)** | Backend y logica de la aplicacion |
+| **HTML** | Estructura de las vistas web |
+| **CSS** | Estilos e interfaz de usuario |
+| **SQL** | Consultas e importacion de datos |
 
 ---
 
@@ -22,7 +31,7 @@
 | `importer.js` | Motor de importacion de archivos Excel |
 | `sql.js` | Utilidades de consultas SQL |
 | `index.js` | Punto de entrada de la aplicacion |
-| `public/` | Vistas web (HTML) de la aplicacion |
+| `public/` | Vistas web (HTML, CSS y JavaScript) |
 | `data/` | Base de datos local de la aplicacion (configuracion) |
 | `.env.example` | Plantilla de configuracion de conexion |
 
