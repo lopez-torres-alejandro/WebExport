@@ -1,25 +1,66 @@
 # WebExport
 
-Web app (Node.js) para importar y exportar datos desde/hacia SQL Server.
+> Aplicación web para importar y exportar datos desde/hacia SQL Server.
 
-## Contenido
+---
 
-| Archivo | Descripción |
+## Caracteristicas
+
+- Importacion de archivos Excel hacia SQL Server
+- Exportacion de datos desde SQL Server
+- Interfaz web sencilla e intuitiva
+- Configuracion de conexion mediante variables de entorno
+
+---
+
+## Estructura del proyecto
+
+| Archivo | Descripcion |
 |---------|-------------|
-| `server.js` | Servidor web principal de la aplicación |
-| `db.js` | Conexión y configuración de la base de datos local |
-| `importer.js` | Motor de importación de archivos Excel |
+| `server.js` | Servidor web principal de la aplicacion |
+| `db.js` | Conexion y configuracion de la base de datos local |
+| `importer.js` | Motor de importacion de archivos Excel |
 | `sql.js` | Utilidades de consultas SQL |
-| `index.js` | Punto de entrada de la aplicación |
-| `public/` | Vistas web (HTML) de la aplicación |
-| `data/` | Base de datos local de la aplicación (configuración) |
-| `.env.example` | Plantilla de configuración de conexión |
+| `index.js` | Punto de entrada de la aplicacion |
+| `public/` | Vistas web (HTML) de la aplicacion |
+| `data/` | Base de datos local de la aplicacion (configuracion) |
+| `.env.example` | Plantilla de configuracion de conexion |
 
-## Instalación
+---
+
+## Instalacion
+
+Requisitos: [Node.js](https://nodejs.org) (version 18 o superior).
 
 ```bash
+# 1. Instalar dependencias
 npm install
+
+# 2. Configurar la conexion
+cp .env.example .env   # y ajustar los valores
+
+# 3. Iniciar la aplicacion
 npm start
 ```
 
-Configura la conexión copiando `.env.example` a `.env` y ajustando los valores (servidor, base de datos, usuario, clave).
+---
+
+## Configuracion
+
+La conexion se configura en el archivo `.env`:
+
+| Variable | Descripcion |
+|----------|-------------|
+| `DB_SERVER` | Servidor de base de datos |
+| `DB_PORT` | Puerto de conexion |
+| `DB_DATABASE` | Nombre de la base de datos |
+| `DB_USER` | Usuario de base de datos |
+| `DB_PASSWORD` | Clave del usuario |
+
+> **Nota:** No compartas el archivo `.env`, contiene credenciales.
+
+---
+
+## Licencia
+
+Uso interno. Repositorio privado.
