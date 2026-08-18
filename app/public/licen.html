@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte VRS 2026</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2f7,#e3e9f2);min-height:100vh;color:#1e293b}
+  .topbar{background:#0f172a;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .topbar .brand{font-size:17px;font-weight:700;letter-spacing:.3px}
+  .topbar .brand span{color:#38bdf8}
+  .container{max-width:720px;margin:28px auto;padding:0 16px;display:grid;gap:20px}
+  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 18px rgba(15,23,42,.07);border:1px solid #e2e8f0}
+  .card h2{font-size:18px;margin-bottom:6px;color:#0f172a}
+  label{display:block;font-size:13px;font-weight:600;color:#334155;margin:16px 0 6px}
+  .micro{font-size:11px;font-weight:400;color:#94a3b8}
+  .ic{width:17px;height:17px;vertical-align:-3.5px;display:inline-block;flex:none}
+  .brand .ic{width:19px;height:19px;vertical-align:-4px;margin-right:6px}
+  .btn{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover{background:#1d4ed8}
+  .btn:disabled{background:#cbd5e1;cursor:not-allowed}
+  .btn-green{background:#059669}
+  .btn-green:hover{background:#047857}
+  .spinner{display:inline-block;width:14px;height:14px;border:2.5px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .calp-rango{display:flex;gap:8px;align-items:center;margin:14px 0 2px;flex-wrap:wrap}
+  .calp-rango input[type=date]{flex:1 1 0;min-width:0;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:14px;background:#fff;color:#0f172a}
+  .calp-rango input[type=date]:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .calp-guion{color:#94a3b8;font-weight:700;flex:none}
+  .calp-x{flex:none;width:30px;height:30px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#94a3b8;font-size:16px;cursor:pointer;line-height:1}
+  .calp-x:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626}
+  .calp-fecha{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:14px 0 2px}
+  .calp-fecha[hidden]{display:none}
+  .calp-head-row{display:flex;align-items:center;justify-content:space-between;width:100%}
+  .filtro-avanzado{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+  .periodo-grid{display:flex;gap:16px;align-items:stretch}
+  .periodo-col{display:flex;flex-direction:column;gap:5px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+  .periodo-tit{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .periodo-col label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#475569;font-weight:600}
+  .periodo-col input[type=date]{padding:7px 9px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;color:#0f172a}
+  .periodo-col input[type=date]:focus{outline:none;border-color:#818cf8;box-shadow:0 0 0 2px #e0e7ff}
+  .calp-trigger{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;padding:10px 12px;background:#fff;border:1.5px dashed #c7d2fe;border-radius:12px;color:#3730a3;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
+  .calp-trigger:hover{background:#eef2ff;border-color:#818cf8}
+  .calp-trigger[hidden]{display:none}
+  .calp-trigger.calp-mini{flex:0 0 auto;padding:5px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px;font-weight:600;gap:6px}
+  .calp-trigger.calp-mini:hover{background:#eef2ff;border-color:#c7d2fe;color:#4f46e5}
+  .calp-trigger.calp-mini .calp-ic{width:14px;height:14px;color:#94a3b8}
+  .calp-trigger.calp-mini .calp-chev{width:12px;height:12px;color:#94a3b8;margin-left:2px}
+  .calp-col-fecha{display:flex;flex-direction:column;gap:8px;flex:1 1 0;min-width:0}
+  .rapido-mes{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rapido-tit{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px}
+  .rapido-pills{display:flex;gap:4px;flex-wrap:wrap}
+  .pill-mes{padding:3px 9px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-size:11.5px;font-weight:600;cursor:pointer}
+  .pill-mes:hover{border-color:#818cf8;color:#4f46e5}
+  .pill-mes.on{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .pill-mes:disabled{opacity:.45;cursor:not-allowed}
+  .calp-ic{color:#4f46e5;flex:none;width:18px;height:18px}
+  .calp-chev{margin-left:auto;color:#818cf8;flex:none;width:14px;height:14px}
+  .modo-filtro{display:flex;gap:4px}
+  .modo-btn{padding:4px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#64748b;font-size:12px;font-weight:600;cursor:pointer}
+  .modo-btn:hover{border-color:#818cf8;color:#4f46e5}
+  .modo-btn.on{background:#4f46e5;border-color:#4f46e5;color:#fff}
+  .calp-guion{color:#94a3b8;font-weight:700;flex:none}
+  .result{display:none;margin-top:20px;padding:18px;border-radius:10px;font-size:14px;line-height:1.7}
+  .result.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+  .result.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .nota{background:#f0f9ff;border:1px solid #bae6fd;color:#075985;border-radius:10px;padding:12px 14px;margin-top:16px;font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg><span>Reporte VRS 2026</span> — Virus Sincitial Respiratorio</div>
+</div>
+
+<div class="container">
+  <div class="card">
+    <h2>Descarga del reporte VRS 2026</h2>
+    <span class="micro">El sistema genera el reporte (procedimiento dbEstrategias.INM.ps_VRS_2026) y descarga el Excel. Opcional: filtra por fecha de atencion.</span>
+
+    <label for="fecMes">Filtrar por fecha de atencion (opcional)</label>
+    <div class="calp-rango">
+      <div class="calp-col-fecha">
+        <div class="rapido-mes" id="fecRapido" hidden>
+          <span class="rapido-tit">Mes de este año</span>
+          <div class="rapido-pills" id="fecPills"></div>
+        </div>
+        <div class="periodo-grid">
+          <div class="periodo-col">
+            <span class="periodo-tit">Fecha de inicio</span>
+            <label>Mes <select id="fecMes" title="Mes de inicio"></select></label>
+            <label>Año <select id="fecAnio" title="Año de inicio"></select></label>
+          </div>
+          <div class="periodo-col">
+            <span class="periodo-tit">Fecha final</span>
+            <label>Mes <select id="fecMesHasta" title="Mes final"></select></label>
+            <label>Año <select id="fecAnioHasta" title="Año final"></select></label>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="calp-x" id="fecLimpia" title="Limpiar fechas">&times;</button>
+    </div>
+    <button type="button" class="calp-trigger calp-mini" id="fecToggle">
+      <svg class="calp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>Filtro avanzado con días</span>
+      <svg class="calp-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="calp-fecha" id="fecPanelDia" hidden>
+      <div class="periodo-grid">
+        <div class="periodo-col">
+          <span class="periodo-tit">Fecha de inicio</span>
+          <label>Día <input type="date" id="fecDesde" title="Día de inicio"></label>
+        </div>
+        <div class="periodo-col">
+          <span class="periodo-tit">Fecha final</span>
+          <label>Día <input type="date" id="fecHasta" title="Día final"></label>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-green" id="btnExp">Descargar CSV</button>
+    </div>
+    <div class="result" id="resultado"></div>
+
+    <div class="nota">Por defecto se descarga todo el periodo (enero 2023 a la fecha). Puedes acotar el rango por mes y año, o usar el filtro avanzado para elegir dias exactos.</div>
+  </div>
+</div>
+
+<script>
+  const $ = (s) => document.getElementById(s);
+  const enc = encodeURIComponent;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  async function api(url, opts) {
+    const r = await fetch(url, opts);
+    let j;
+    try { j = await r.json(); } catch (_) { j = { ok: false, error: 'Respuesta invalida del servidor' }; }
+    if (!j.ok) throw new Error(j.error || 'Error del servidor');
+    return j;
+  }
+  function fmtDur(ms) {
+    const s = Math.round(Number(ms) / 1000);
+    const m = Math.floor(s / 60);
+    return m > 0 ? m + ' min ' + (s % 60) + ' s' : s + ' s';
+  }
+  const VRS = 'dbEstrategias.INM.VRS_2026';
+  const SP = 'dbEstrategias.INM.ps_VRS_2026';
+  const ANIO = 2026;
+  const NOM_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  function poblarFecMeses() {
+    const sA = $('fecAnio'), sAH = $('fecAnioHasta'), sM = $('fecMes'), sMH = $('fecMesHasta');
+    if (!sA || !sAH || !sM || !sMH) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    if (!sA.options.length) {
+      let anios = '';
+      for (let y = curY; y >= Math.max(2020, curY - 6); y--) anios += `<option value="${y}">${y}</option>`;
+      sA.innerHTML = anios;
+      sAH.innerHTML = anios;
+      const meses = NOM_MES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+      sM.innerHTML = meses;
+      sMH.innerHTML = meses;
+    }
+    const iniY = Math.min(...Array.from(sA.options).map((o) => Number(o.value)));
+    sA.value = String(Math.max(2023, iniY));
+    sAH.value = String(curY);
+    sM.value = '1';
+    sMH.value = String(curM);
+    Array.from(sM.options).forEach((o) => { o.disabled = Number(sA.value) === curY && Number(o.value) > curM; });
+    Array.from(sMH.options).forEach((o) => { o.disabled = Number(sAH.value) === curY && Number(o.value) > curM; });
+    const s1 = sM.selectedOptions[0], s2 = sMH.selectedOptions[0];
+    if (s1 && s1.disabled) sM.value = String(curM);
+    if (s2 && s2.disabled) sMH.value = String(curM);
+  }
+  function fecFiltro() {
+    const diaAbierto = !$('fecPanelDia').hidden;
+    const ds = $('fecDesde').value, dh = $('fecHasta').value;
+    if (diaAbierto && ds && dh) return { desde: ds, hasta: dh };
+    const md = Math.min(Number($('fecMes').value), Number($('fecMesHasta').value));
+    const mh = Math.max(Number($('fecMes').value), Number($('fecMesHasta').value));
+    const ad = Math.min(Number($('fecAnio').value), Number($('fecAnioHasta').value));
+    const ah = Math.max(Number($('fecAnio').value), Number($('fecAnioHasta').value));
+    return { desde: ad + '-' + String(md).padStart(2, '0') + '-01', hasta: new Date(ah, mh, 0).toISOString().slice(0, 10) };
+  }
+  function fecRapidoRender() {
+    const wrap = $('fecRapido');
+    const pills = $('fecPills');
+    if (!wrap || !pills) return;
+    const hoy = new Date();
+    const curY = hoy.getFullYear(), curM = hoy.getMonth() + 1;
+    wrap.hidden = false;
+    pills.innerHTML = NOM_MES.slice(0, curM).map((n, i) =>
+      `<button type="button" class="pill-mes" data-m="${i + 1}" title="Exportar ${n} ${curY}">${n}</button>`
+    ).join('');
+  }
+  $('fecPills').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-mes');
+    if (!b) return;
+    const m = Number(b.dataset.m);
+    const hoy = new Date();
+    $('fecMes').value = String(m);
+    $('fecMesHasta').value = String(m);
+    $('fecAnio').value = String(hoy.getFullYear());
+    $('fecAnioHasta').value = String(hoy.getFullYear());
+  });
+  function fecSetBloqueo(bloqueado) {
+    ['fecMes', 'fecMesHasta', 'fecAnio', 'fecAnioHasta'].forEach((id) => {
+      const el = $('' + id);
+      if (el) el.disabled = bloqueado;
+    });
+    const pills = $('fecPills');
+    if (pills) Array.from(pills.querySelectorAll('.pill-mes')).forEach((b) => { b.disabled = bloqueado; });
+  }
+  $('fecToggle').addEventListener('click', () => {
+    const p = $('fecPanelDia');
+    p.hidden = !p.hidden;
+    fecSetBloqueo(!p.hidden);
+  });
+  $('fecLimpia').addEventListener('click', () => {
+    $('fecDesde').value = '';
+    $('fecHasta').value = '';
+    $('fecPanelDia').hidden = true;
+    fecSetBloqueo(false);
+    poblarFecMeses();
+  });
+  poblarFecMeses();
+  fecRapidoRender();
+
+  $('btnExp').addEventListener('click', async () => {
+    const btn = $('btnExp');
+    const box = $('resultado');
+    const filtro = fecFiltro();
+    if (!$('fecPanelDia').hidden) {
+      const ds = $('fecDesde').value, dh = $('fecHasta').value;
+      if (ds && dh && ds > dh) {
+        box.className = 'result err'; box.style.display = 'block';
+        box.innerHTML = 'La fecha inicio no puede ser despues de la fecha fin.';
+        return;
+      }
+      if (!!ds !== !!dh) {
+        box.className = 'result err'; box.style.display = 'block';
+        box.innerHTML = 'Elige ambas fechas (inicio y fin) o ninguna.';
+        return;
+      }
+    }
+    box.className = 'result ok'; box.style.display = 'block';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Generando reporte...';
+    try {
+      const spKey = 'spTiempo_' + SP;
+      const prevMs = Number(localStorage.getItem(spKey) || 0);
+      box.innerHTML = 'Ejecutando procedimiento <b>dbEstrategias.INM.ps_VRS_2026</b> (generando el reporte)...' +
+        (prevMs > 0 ? ' Ultima vez tardo: ~' + fmtDur(prevMs) + '.' : '');
+      const g = await api('/api/ejecutar-sp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sp: SP, tabla: VRS, params: { anio: ANIO } }),
+      });
+      if (g.durMs) localStorage.setItem(spKey, g.durMs);
+      box.innerHTML = 'Reporte generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas)' +
+        (g.durMs ? ' en <b>' + fmtDur(g.durMs) + '</b>' : '') + '. Descargando CSV...';
+      let qf = '';
+      if (filtro) qf = '&f=' + enc('fecha_atencion:' + filtro.desde + ':' + filtro.hasta);
+      const r = await fetch('/api/exportar?tabla=' + enc(VRS) + qf + '&fmt=csv');
+      if (!r.ok) {
+        let m = 'Error al exportar.';
+        try { const j = await r.json(); m = j.error || m; } catch (_) {}
+        throw new Error(m);
+      }
+      const blob = await r.blob();
+      const exportadas = r.headers.get('X-Exportadas') || '?';
+      const cd = r.headers.get('Content-Disposition') || '';
+      const fm = /filename="([^"]+)"/.exec(cd);
+      const nombre = fm ? fm[1] : 'VRS_2026_' + new Date().toISOString().slice(0, 10) + '.csv';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      box.innerHTML = 'Listo. <b>' + exportadas + '</b> filas descargadas en <b>' + esc(nombre) + '</b>' + (filtro ? ' (fechas: ' + esc(filtro.desde) + ' a ' + esc(filtro.hasta) + ')' : ' (reporte completo)') + '.';
+    } catch (e) {
+      box.className = 'result err';
+      box.innerHTML = esc(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Descargar CSV';
+    }
+  });
+</script>
+</body>
+</html>
