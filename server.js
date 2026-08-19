@@ -4,7 +4,7 @@ const multer = require('multer');
 const os = require('os');
 const fs = require('fs');
 const { execFile, execFileSync } = require('child_process');
-const { sql, getConfig, esTrusted } = require('./sql');
+const { sql, getConfig } = require('./sql');
 const XLSX = require('xlsx');
 const AdmZip = require('adm-zip');
 const imp = require('./importer');
@@ -134,9 +134,11 @@ app.get('/api/tablas/visibilidad', wrap(async (req, res) => {
   try {
     const all = (await imp.listTables(pool)).concat(await imp.listTablesDe(pool, 'dbEstrategias'));
     const ocultas = db.getTablasOcultas();
-    const tablas = all.map((t) => ({ tabla: t, visible: !ocultas.has(t) }));
+    const ocultasTrab = db.getTablasOcultasTrab();
+    const tablas = all.map((t) => ({ tabla: t, visible: !ocultas.has(t), visibleTrab: !ocultasTrab.has(t) }));
     const visibles = tablas.filter((t) => t.visible).map((t) => t.tabla);
-    res.json({ ok: true, tablas, visibles });
+    const visiblesTrab = tablas.filter((t) => t.visibleTrab).map((t) => t.tabla);
+    res.json({ ok: true, tablas, visibles, visiblesTrab });
   } finally { await pool.close(); }
 }));
 
@@ -150,11 +152,15 @@ app.get('/api/tablas', wrap(async (req, res) => {
 }));
 
 app.post('/api/tablas/visibilidad', wrap(async (req, res) => {
-  const [db, schema, table] = imp.splitTabla(req.body.tabla || '');
-  const sc = db ? `${db}.${schema}` : schema;
-  const visible = req.body.visible !== false && req.body.visible !== 'false';
-  db.setTablaVisible(sc, table, !!visible);
-  res.json({ ok: true, tabla: `${sc}.${table}`, visible: !!visible });
+  const [dbParte, schema, table] = imp.splitTabla(req.body.tabla || '');
+  const sc = dbParte ? `${dbParte}.${schema}` : schema;
+  if (Object.prototype.hasOwnProperty.call(req.body, 'visibleTrab')) {
+    db.setTablaVisibleTrab(sc, table, req.body.visibleTrab !== false && req.body.visibleTrab !== 'false');
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body, 'visible')) {
+    db.setTablaVisible(sc, table, req.body.visible !== false && req.body.visible !== 'false');
+  }
+  res.json({ ok: true, tabla: `${sc}.${table}` });
 }));
 
 app.get('/api/columnas', wrap(async (req, res) => {
@@ -609,7 +615,7 @@ function ddlType(c) {
     return `${t}${c.CHARACTER_MAXIMUM_LENGTH == null ? '' : c.CHARACTER_MAXIMUM_LENGTH === -1 ? '(MAX)' : '(' + c.CHARACTER_MAXIMUM_LENGTH + ')'}`;
   }
   if (/decimal|numeric/.test(t)) return `${t}(${c.NUMERIC_PRECISION},${c.NUMERIC_SCALE})`;
-  if (/datetime2|datetimeoffset|time/.test(t)) return `${t}(${c.DATETIME_PRECISION})`;
+  if (/^(datetime2|datetimeoffset|time)$/.test(t)) return `${t}(${c.DATETIME_PRECISION || 7})`;
   return t;
 }
 
@@ -617,16 +623,24 @@ async function insertarStaging(pool, schema, table, stagingId, columns, uniqueRo
   const base = pctBase || 30;
   const stagingQual = `${imp.br(schema)}.${imp.br(stagingId)}`;
   const ddl = columns.map((c) => `[${c.COLUMN_NAME}] ${ddlType(c)} NULL`).join(', ');
-  await pool.request().query(`CREATE TABLE ${stagingQual} (${ddl}, _rn INT IDENTITY(1,1));`);
+  await pool.request().query(`CREATE TABLE ${stagingQual} (${ddl}, _rn INT IDENTITY(1,1) PRIMARY KEY);`);
   const total = uniqueRows.length;
   const t0S = Date.now();
   const priorMs = histPorFila(String(tablaKey).startsWith('@') ? tablaKey : tablaKey + '@estandar') || histPorFilaGlobal('@estandar');
   const priorS = priorMs != null ? (priorMs / 1000) * total : null;
   const inicial = priorS != null ? Math.round(priorS * (1 + (extraFactor || 1)) + (extraFijo || 15)) : undefined;
   send('progress', { pct: base, msg: `Insertando ${total} filas en staging...`, eta: inicial });
-  const SUB = 5000;
-  const stagingCols = columns.map((c) => imp.br(c.COLUMN_NAME)).join(', ');
-  const tareas = [];
+  const BATCH = 20000;
+  const insertarChunk = async (desde, hasta) => {
+    for (let i = desde; i < hasta; i += BATCH) {
+      const batch = uniqueRows.slice(i, Math.min(i + BATCH, hasta));
+      const tbl = new sql.Table(stagingId);
+      tbl.create = false;
+      columns.forEach((c) => tbl.columns.add(c.COLUMN_NAME, bulkType(c), { nullable: true }));
+      for (const vals of batch) tbl.rows.add(...vals);
+      await pool.request().bulk(tbl);
+    }
+  };
   let hecho = 0;
   const notificar = () => {
     const el = (Date.now() - t0S) / 1000;
@@ -644,16 +658,18 @@ async function insertarStaging(pool, schema, table, stagingId, columns, uniqueRo
       eta,
     });
   };
-  for (let i = 0; i < total; i += SUB) {
-    const batch = uniqueRows.slice(i, Math.min(i + SUB, total));
-    for (const vals of batch) {
-      const req = pool.request();
-      columns.forEach((c, j) => req.input(`p${j}`, bulkType(c), vals[j]));
-      await req.query(`INSERT INTO ${stagingQual} (${stagingCols}) VALUES (${columns.map((_, j) => `@p${j}`).join(', ')});`);
-    }
-    hecho += batch.length;
-    notificar();
+  const nHilos = total > 20000 ? 2 : 1;
+  const tam = Math.ceil(total / nHilos);
+  const tareas = [];
+  for (let k = 0; k < nHilos; k++) {
+    const desde = k * tam;
+    const hasta = Math.min(total, desde + tam);
+    tareas.push(insertarChunk(desde, hasta).then(() => {
+      hecho += hasta - desde;
+      notificar();
+    }));
   }
+  await Promise.all(tareas);
   return { stagingQual, durMs: Date.now() - t0S };
 }
 
@@ -677,8 +693,12 @@ function execDocker(args) {
 }
 
 async function containerListo() {
-  const out = await execDocker(['ps', '--filter', `name=${CONT}`, '--format', '{{.Names}}']);
-  return out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).includes(CONT);
+  try {
+    const out = await execDocker(['ps', '--filter', `name=${CONT}`, '--format', '{{.Names}}']);
+    return out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).includes(CONT);
+  } catch (_) {
+    return false;
+  }
 }
 async function asegurarImportDir() {
   await execDocker(['exec', CONT, 'mkdir', '-p', RUTA_IMPORT]);
@@ -914,11 +934,11 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
   const pool = await sql.connect(getConfig());
   let tx = null;
   let txDeleteP = null;
-  let chunkFiles = [];
-  let chunkNames = [];
+  let tmpFile = null;
+  let containerName = null;
   let eliminadas = 0;
   try {
-    if (!(await containerListo())) throw new InfraError('El contenedor ' + CONT + ' no esta corriendo.');
+    const conDocker = await containerListo();
     tx = new sql.Transaction(pool);
     await tx.begin();
     if (reemplazar) {
@@ -926,23 +946,17 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
         if (filtros.length) {
           const cq = new sql.Request(tx);
           const cwd = filtroWhere(filtros, cq);
-          const cr = await cq.query(`SELECT COUNT(*) AS n, COUNT(CASE WHEN ${cwd} THEN 1 END) AS m FROM ${qual};`);
+          const cr = await cq.query(`SELECT COUNT(*) AS n, (SELECT COUNT(*) FROM ${qual} WHERE ${cwd}) AS m FROM ${qual};`);
           const n = cr.recordset[0].n || 0;
           const m = cr.recordset[0].m || 0;
           if (n === m) {
             await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
             eliminadas = n;
           } else {
-            let eliminadasT = 0;
-            while (true) {
-              const dq = new sql.Request(tx);
-              const wd = filtroWhere(filtros, dq);
-              const dr = await dq.query(`DELETE TOP (200000) FROM ${qual} WHERE ${wd};`);
-              const n = dr.rowsAffected[0] || 0;
-              eliminadasT += n;
-              if (n < 200000) break;
-            }
-            eliminadas = eliminadasT;
+            const dq = new sql.Request(tx);
+            const wd = filtroWhere(filtros, dq);
+            const dr = await dq.query(`DELETE FROM ${qual} WHERE ${wd};`);
+            eliminadas = dr.rowsAffected[0] || 0;
           }
         } else {
           const cr = await new sql.Request(tx).query(`SELECT COUNT(*) AS n FROM ${qual};`);
@@ -1161,45 +1175,55 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
   send('progress', { pct: 16, msg: `Camino rapido: ${filasValidas.toLocaleString()} filas validas.` });
 
   await txDeleteP;
-  await asegurarImportDir();
 
-  const CHUNK = 400000;
-  const nB = Math.max(1, Math.ceil(filasValidas / CHUNK));
   const priorB = histPorFila(tabla + '@rapido') || histPorFilaGlobal('@rapido');
   const priorBS = priorB != null ? (priorB / 1000) * filasValidas : null;
   let estB = priorBS != null ? Math.round(priorBS + 8) : undefined;
   const tB0 = Date.now();
-  send('progress', { pct: 22, msg: `Camino rapido: BULK INSERT (${nB} lote${nB > 1 ? 's' : ''})...`, eta: estB });
   let insertados = 0;
-  try {
-    for (let b = 1; b <= nB; b++) {
-      const desde = 1 + (b - 1) * CHUNK;
-      const hasta = Math.min(outLines.length, desde + CHUNK);
-      const chunkFile = path.join(os.tmpdir(), `imp_${Date.now()}_${b}_${Math.random().toString(36).slice(2)}.csv`);
-      const name = `import_${Date.now()}_${b}_${Math.random().toString(36).slice(2)}.csv`;
-      chunkFiles.push(chunkFile);
-      chunkNames.push(name);
-      fs.writeFileSync(chunkFile, outLines[0] + '\n' + outLines.slice(desde, hasta).join('\n') + '\n', 'utf8');
-      await copiarAlContenedor(chunkFile, name);
-      let n = 0;
-      try {
-        const br = await new sql.Request(tx).query(`BULK INSERT ${qual} FROM '${RUTA_IMPORT}/${name}' WITH (FIRSTROW=2, FIELDTERMINATOR='|', ROWTERMINATOR='0x0A', MAXERRORS=0, TABLOCK, ROWS_PER_BATCH=50000); SELECT @@ROWCOUNT AS n;`);
-        n = (br.recordset && br.recordset[0] && br.recordset[0].n) || br.rowsAffected[0] || 0;
-      } catch (e) {
-        if (e instanceof InfraError) throw e;
-        throw new InfraError('BULK INSERT fallo: ' + (e.message || '').slice(0, 300));
-      }
-      insertados += n;
-      const elB = (Date.now() - tB0) / 1000;
-      const rpsB = elB > 0 ? insertados / elB : 0;
-      if (rpsB > 0) {
-        const nuevo = (filasValidas - insertados) / rpsB + 8;
-        estB = estB == null ? Math.round(nuevo) : Math.round(estB * 0.6 + nuevo * 0.4);
-      }
-      send('progress', { pct: Math.round(22 + (b / nB) * 70), msg: `BULK INSERT: ${b} de ${nB} lotes...`, eta: estB });
+  if (conDocker) {
+    await asegurarImportDir();
+    send('progress', { pct: 22, msg: 'Camino rapido: BULK INSERT...', eta: estB });
+    tmpFile = path.join(os.tmpdir(), `imp_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`);
+    containerName = `import_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`;
+    fs.writeFileSync(tmpFile, outLines.join('\n') + '\n', 'utf8');
+    await copiarAlContenedor(tmpFile, containerName);
+    try {
+      const br = await new sql.Request(tx).query(`BULK INSERT ${qual} FROM '${RUTA_IMPORT}/${containerName}' WITH (FIRSTROW=2, FIELDTERMINATOR='|', ROWTERMINATOR='0x0A', MAXERRORS=0, TABLOCK); SELECT @@ROWCOUNT AS n;`);
+      insertados = (br.recordset && br.recordset[0] && br.recordset[0].n) || br.rowsAffected[0] || 0;
+    } catch (e) {
+      if (e instanceof InfraError) throw e;
+      throw new InfraError('BULK INSERT fallo: ' + (e.message || '').slice(0, 300));
     }
-  } catch (e) {
-    throw e;
+  } else {
+    send('progress', { pct: 22, msg: 'Camino rapido sin Docker: insertando con bulk directo...', eta: estB });
+    const tbl = new sql.Table(`${schema}.${table}`);
+    tbl.create = false;
+    columns.forEach((c) => tbl.columns.add(c.COLUMN_NAME, bulkType(c), { nullable: true }));
+    for (let L = 1; L < outLines.length; L++) {
+      if (!String(outLines[L]).trim()) continue;
+      const celdas = outLines[L].split(SEP);
+      const rowVals = columns.map((c, j) => {
+        const v = celdas[j] == null ? '' : String(celdas[j]);
+        if (v === '') return null;
+        if (esFecha(c.DATA_TYPE)) {
+          const d = new Date(v);
+          return isNaN(d.getTime()) ? null : d;
+        }
+        if (NUMERIC_TYPES.test(c.DATA_TYPE)) {
+          const n = Number(v);
+          return isNaN(n) ? v : n;
+        }
+        return v;
+      });
+      tbl.rows.add(...rowVals);
+    }
+    try {
+      await new sql.Request(tx).bulk(tbl);
+    } catch (e) {
+      throw new InfraError('La insercion rapida sin Docker fallo: ' + (e.message || '').slice(0, 300));
+    }
+    insertados = filasValidas;
   }
   if (!insertados) throw new Error('El archivo no tiene filas validas.');
   await tx.commit();
@@ -1225,8 +1249,8 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
       try { if (txDeleteP) await txDeleteP.catch(() => {}); } catch (_) {}
       try { await tx.rollback(); } catch (_) {}
     }
-    for (const f of chunkFiles) { try { fs.unlinkSync(f); } catch (_) {} }
-    for (const c of chunkNames) { try { await borrarEnContenedor(c); } catch (_) {} }
+    try { if (tmpFile) fs.unlinkSync(tmpFile); } catch (_) {}
+    try { if (containerName) await borrarEnContenedor(containerName); } catch (_) {}
   }
 }
 
@@ -1301,10 +1325,22 @@ app.post('/api/ejecutar-sp', wrap(async (req, res) => {
   const tabla = String(req.body.tabla || '').trim();
   if (!sp) throw new Error('Falta el nombre del procedimiento.');
   if (!/^[A-Za-z0-9_][A-Za-z0-9_.]*$/.test(sp)) throw new Error('Procedimiento invalido.');
+  const params = req.body.params && typeof req.body.params === 'object' && !Array.isArray(req.body.params)
+    ? req.body.params : {};
+  const pares = Object.entries(params)
+    .filter(([k]) => /^@?[A-Za-z_][A-Za-z0-9_]*$/.test(k))
+    .map(([k, v]) => {
+      const nom = k.startsWith('@') ? k : '@' + k;
+      let val;
+      if (v === null || v === undefined || v === '') val = 'NULL';
+      else if (typeof v === 'number') val = String(v);
+      else val = `N'${String(v).replace(/'/g, "''")}'`;
+      return `${nom} = ${val}`;
+    });
   const pool = await new sql.ConnectionPool(getConfig()).connect();
   try {
     const t0 = Date.now();
-    await pool.request().query(`EXEC ${sp};`);
+    await pool.request().query(pares.length ? `EXEC ${sp} ${pares.join(', ')};` : `EXEC ${sp};`);
     const durMs = Date.now() - t0;
     histRegistrar(`${sp}@sp`, 1, durMs, null);
     let filas = 0;
@@ -1325,7 +1361,9 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
 
+  const t0 = Date.now();
   let pool;
+  let stagingId = null;
   try {
     const tabla = req.body.tabla;
     if (!req.file) throw new Error('No se recibio ningun archivo.');
@@ -1353,6 +1391,7 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
 
     try {
       const done = await cargarRapido({ req, tabla, schema, table, columns, filtros, reemplazar, send });
+      done.durMs = Date.now() - t0;
       try { send('done', done); } catch (_) {}
       try { res.end(); } catch (_) {}
       try { await pool.close(); } catch (_) {}
@@ -1430,6 +1469,7 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
 
     send('progress', { pct: 25, msg: 'Mapeando datos...' });
     const indexes = columns.map((c) => ({ col: c, idx: headers.indexOf(imp.norm(c.COLUMN_NAME)) }));
+    const keyIdxMap = claves.map((c) => columns.findIndex((col) => imp.norm(col.COLUMN_NAME) === imp.norm(c)));
     const seen = new Map();
     let sinFiltro = 0;
     for (let r = 1; r < rows.length; r++) {
@@ -1440,7 +1480,7 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
         const v = imp.toDbValue(row[idx], col);
         return coerceF(col, v);
       });
-      const k = values.map((v) => (v instanceof Date ? 'D' + v.getTime() : v == null ? '' : String(v))).join('\u001e');
+      const k = keyIdxMap.map((i) => (values[i] instanceof Date ? 'D' + values[i].getTime() : values[i] == null ? '' : String(values[i]))).join('\u001e');
       if (!k) { sinFiltro++; continue; }
       seen.set(k, values);
     }
@@ -1454,53 +1494,27 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
     if (reemplazar) {
       send('progress', { pct: 30, msg: filtros.length ? 'Contando filas existentes del periodo...' : 'Contando filas existentes de la tabla...' });
       if (filtros.length) {
-        const q = pool.request();
-        const where = filtroWhere(filtros, q);
-        const rc = await q.query(`SELECT COUNT(*) AS c FROM ${qual} WHERE ${where};`);
+        const cq = pool.request();
+        const cwd = filtroWhere(filtros, cq);
+        const rc = await cq.query(`SELECT COUNT(*) AS c FROM ${qual} WHERE ${cwd};`);
         eliminadas = rc.recordset[0].c;
         if (eliminadas) {
-          const tDel0 = Date.now();
-          let borradas = 0;
-          let estDel = null;
-          while (borradas < eliminadas) {
-            const r = await q.query(`DELETE TOP (200000) FROM ${qual} WHERE ${where};`);
-            const n = r.rowsAffected[0] || 0;
-            if (!n) break;
-            borradas += n;
-            const elD = (Date.now() - tDel0) / 1000;
-            const rpsD = elD > 0 ? borradas / elD : 0;
-            if (rpsD > 0) {
-              const nuevo = (eliminadas - borradas) / rpsD + 20;
-              estDel = estDel == null ? Math.round(nuevo) : Math.round(estDel * 0.5 + nuevo * 0.5);
-            }
-            send('progress', { pct: 40, msg: `Eliminando: ${borradas.toLocaleString()} de ${eliminadas.toLocaleString()}...`, eta: estDel });
-          }
+          send('progress', { pct: 40, msg: `Eliminando ${eliminadas.toLocaleString()} filas del periodo...` });
+          const dq = pool.request();
+          const dwd = filtroWhere(filtros, dq);
+          await dq.query(`DELETE FROM ${qual} WHERE ${dwd};`);
         }
       } else {
         const rc = await pool.request().query(`SELECT COUNT(*) AS c FROM ${qual};`);
         eliminadas = rc.recordset[0].c;
         if (eliminadas) {
-          const tDel0 = Date.now();
-          let borradas = 0;
-          let estDel = null;
-          while (borradas < eliminadas) {
-            const r = await pool.request().query(`DELETE TOP (200000) FROM ${qual};`);
-            const n = r.rowsAffected[0] || 0;
-            if (!n) break;
-            borradas += n;
-            const elD = (Date.now() - tDel0) / 1000;
-            const rpsD = elD > 0 ? borradas / elD : 0;
-            if (rpsD > 0) {
-              const nuevo = (eliminadas - borradas) / rpsD + 20;
-              estDel = estDel == null ? Math.round(nuevo) : Math.round(estDel * 0.5 + nuevo * 0.5);
-            }
-            send('progress', { pct: 40, msg: `Eliminando: ${borradas.toLocaleString()} de ${eliminadas.toLocaleString()}...`, eta: estDel });
-          }
+          send('progress', { pct: 40, msg: `Eliminando ${eliminadas.toLocaleString()} filas de la tabla...` });
+          await pool.request().query(`DELETE FROM ${qual};`);
         }
       }
     }
 
-    const stagingId = `tmp${Date.now()}`;
+    stagingId = `tmp${Date.now()}`;
     send('progress', { pct: 45, msg: 'Creando tabla staging...' });
     const resSt = await insertarStaging(pool, schema, table, stagingId, columns, uniqueRows, send, 1, 15, 45, tabla);
 
@@ -1526,11 +1540,15 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
       insertados, eliminadas, rellenadas,
       duplicadas: duplicadasEnArchivo, omitidas: sinFiltro + mezclaOmitida,
       mezclaOmitida,
+      durMs: Date.now() - t0,
     });
     res.end();
   } catch (e) {
     try { fs.appendFileSync(path.join(__dirname, 'err_dump.log'), JSON.stringify({ msg: e && e.message, stack: e && e.stack, name: e && e.name }) + '\n'); } catch (_) {}
     console.error('[cargar] ERROR:', e && e.stack ? e.stack : e);
+    if (pool && stagingId) {
+      try { await pool.request().query(`IF OBJECT_ID('${imp.br(schema)}.${imp.br(stagingId)}') IS NOT NULL DROP TABLE ${imp.br(schema)}.${imp.br(stagingId)};`); } catch (_) {}
+    }
     if (pool) { try { await pool.close(); } catch (_) {} }
     send('error', { message: e.message }); res.end();
   }
@@ -1593,7 +1611,13 @@ function parseFileBuffer(buffer, originalname) {
 }
 
 function bulkType(c) {
-  if (['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext'].includes(c.DATA_TYPE)) return sql.NVarChar(sql.MAX);
+  if (['text', 'ntext'].includes(c.DATA_TYPE)) return sql.NVarChar(sql.MAX);
+  if (['varchar', 'nvarchar', 'char', 'nchar'].includes(c.DATA_TYPE)) {
+    const len = c.CHARACTER_MAXIMUM_LENGTH;
+    if (len != null && len > 0 && len < 4000) {
+      return c.DATA_TYPE.startsWith('n') ? sql.NVarChar(len) : sql.VarChar(len);
+    }
+  }
   return imp.typeOf(c);
 }
 
@@ -1604,6 +1628,7 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
 
+  const t0 = Date.now();
   let pool;
   let stagingQual = null;
   try {
@@ -1681,6 +1706,7 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
     const tgtCols = allCols.map((n) => `[${n}]`).join(', ');
     const onClause = claves.map((k) => `t.[${k}] = s.[${k}]`).join(' AND ');
     const updateSet = setCols.map((n) => `t.[${n}] = s.[${n}]`).join(', ');
+    const diffCond = setCols.map((n) => `t.[${n}] IS DISTINCT FROM s.[${n}]`).join(' OR ');
 
     const countBefore = await pool.request().query(`SELECT COUNT(*) AS c FROM ${qualified};`);
     const beforeCount = countBefore.recordset[0].c;
@@ -1695,16 +1721,19 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
     await tx.begin();
     const tM0 = Date.now();
     try {
+      if (claves.length) {
+        await pool.request().query(`CREATE INDEX IX_tmp_${stagingId} ON ${imp.br(schema)}.${imp.br(stagingId)} (${claves.map((k) => `[${k}]`).join(', ')});`);
+      }
       for (let b = 1; b <= nB; b++) {
         const req = new sql.Request(tx);
-        await req.query(`
+        const mergeSql = `
           MERGE ${qualified} AS t
           USING (SELECT ${columns.map((c) => `[${c.COLUMN_NAME}]`).join(', ')} FROM ${imp.br(schema)}.${imp.br(stagingId)} WHERE _rn BETWEEN ${(b - 1) * 100000 + 1} AND ${b * 100000}) AS s
           ON ${onClause}
-          WHEN MATCHED THEN UPDATE SET ${updateSet}
+          ${setCols.length ? `WHEN MATCHED AND (${diffCond}) THEN UPDATE SET ${updateSet}` : ''}
           WHEN NOT MATCHED THEN INSERT (${tgtCols})
-            VALUES (${columns.map((c) => `s.[${c.COLUMN_NAME}]`).join(', ')});
-        `);
+            VALUES (${columns.map((c) => `s.[${c.COLUMN_NAME}]`).join(', ')});`;
+        await req.query(mergeSql);
         const elM = (Date.now() - tM0) / 1000;
         const rpsM = elM > 0 ? (b * 100000) / elM : 0;
         if (rpsM > 0) {
@@ -1733,6 +1762,7 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
       archivo: req.file.originalname, tabla, clave: claves.join(' + '),
       totalFilas, filasValidas: total, duplicadas: proc.duplicadas, omitidas: proc.skipped.length,
       insertados: netNew, actualizados: total - netNew, errores: 0, advertencia,
+      durMs: Date.now() - t0,
     });
     res.end();
   } catch (e) {

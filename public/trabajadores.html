@@ -249,10 +249,13 @@
 
   async function cargarTablas() {
     try {
-      const j = await api('/api/tablas');
+      const j = await api('/api/tablas/visibilidad');
+      const vis = (j.tablas || []).filter((t) => t.visibleTrab).map((t) => t.tabla);
       const sel = $('selTabla');
       sel.innerHTML = '<option value="">Elegir tabla para exportar...</option>' +
-        j.tablas.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+        (vis.length
+          ? vis.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
+          : '<option value="">(Sin tablas habilitadas: configuralas en Importar)</option>');
       $('stBadge').className = 'badge';
       $('stBadge').innerHTML = '<span class="dot"></span>Conectado';
     } catch (e) {

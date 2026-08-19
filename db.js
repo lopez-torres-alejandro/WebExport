@@ -27,9 +27,15 @@ db.exec(`
     schema_name TEXT NOT NULL,
     tabla TEXT NOT NULL,
     visible INTEGER NOT NULL DEFAULT 1,
+    visible_trab INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (schema_name, tabla)
   );
 `);
+
+const colsVis = db.prepare('PRAGMA table_info(tablas_visibles)').all();
+if (!colsVis.some((c) => c.name === 'visible_trab')) {
+  db.exec('ALTER TABLE tablas_visibles ADD COLUMN visible_trab INTEGER NOT NULL DEFAULT 1;');
+}
 
 const now = () => new Date().toISOString();
 
@@ -84,6 +90,18 @@ const setTablaVisible = (schema, tabla, visible) => {
   `).run(String(schema), String(tabla), visible ? 1 : 0);
 };
 
+const getTablasOcultasTrab = () => {
+  const rows = db.prepare('SELECT schema_name, tabla FROM tablas_visibles WHERE visible_trab = 0').all();
+  return new Set(rows.map((r) => `${r.schema_name}.${r.tabla}`));
+};
+
+const setTablaVisibleTrab = (schema, tabla, visible) => {
+  db.prepare(`
+    INSERT INTO tablas_visibles (schema_name, tabla, visible_trab) VALUES (?, ?, ?)
+    ON CONFLICT(schema_name, tabla) DO UPDATE SET visible_trab = excluded.visible_trab
+  `).run(String(schema), String(tabla), visible ? 1 : 0);
+};
+
 module.exports = {
   getRecomendacion,
   setRecomendacion,
@@ -94,4 +112,6 @@ module.exports = {
   deleteFavorito,
   getTablasOcultas,
   setTablaVisible,
+  getTablasOcultasTrab,
+  setTablaVisibleTrab,
 };

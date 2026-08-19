@@ -146,6 +146,7 @@
   }
   const VRS = 'dbEstrategias.INM.VRS_2026';
   const SP = 'dbEstrategias.INM.ps_VRS_2026';
+  const ANIO = 2026;
   const NOM_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   function poblarFecMeses() {
@@ -255,7 +256,7 @@
       const g = await api('/api/ejecutar-sp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sp: SP, tabla: VRS }),
+        body: JSON.stringify({ sp: SP, tabla: VRS, params: { anio: ANIO } }),
       });
       if (g.durMs) localStorage.setItem(spKey, g.durMs);
       box.innerHTML = 'Reporte generado (<b>' + Number(g.filas).toLocaleString() + '</b> filas)' +

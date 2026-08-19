@@ -149,6 +149,20 @@
   .modal-list label:hover{background:#f8fafc}
   .modal-list input{margin:0}
   .vis-actions{display:flex;gap:8px;margin:10px 0 4px}
+  .modal-wide{max-width:880px}
+  .vis-search{position:relative}
+  .vis-search input{width:100%;padding:9px 12px 9px 34px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;margin-top:8px;outline:none}
+  .vis-search input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .vis-search::before{content:'\2315';position:absolute;left:12px;top:calc(8px + 13px);color:#94a3b8;font-size:14px;pointer-events:none}
+  .vis-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+  .vis-panel{display:flex;flex-direction:column;min-width:0}
+  .vis-panel-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+  .vis-panel-head b{font-size:13px;color:#0f172a;letter-spacing:.02em}
+  .vis-panel-head .micro{display:inline;margin:0;color:#64748b;font-weight:600}
+  .vis-panel-actions{margin-left:auto;display:flex;gap:6px}
+  .vis-panel-actions .btn-sm{padding:4px 9px;font-size:11px}
+  .vis-cols .modal-list{max-height:300px;margin-top:6px}
+  @media (max-width:760px){.vis-cols{grid-template-columns:1fr}}
   .btn-sm{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#334155;cursor:pointer}
   .btn-sm:hover{background:#e2e8f0}
 
@@ -529,15 +543,34 @@
 
 <!-- Modal: visibilidad de tablas -->
 <div class="overlay" id="overlayVis" hidden>
-  <div class="modal">
+  <div class="modal modal-wide">
     <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg> Tablas a mostrar en los menus</h3>
-    <span class="micro">Las tablas desmarcadas no aparecen en importar ni exportar. Se guarda automaticamente.</span>
-    <div class="vis-actions">
-      <button class="btn-sm" id="btnVisAll">Mostrar todas</button>
-      <button class="btn-sm" id="btnVisNone">Ocultar todas</button>
-      <span class="micro" id="visCount" style="margin-left:auto;align-self:center"></span>
+    <span class="micro">Las tablas desmarcadas no aparecen en su menu correspondiente. Se guarda automaticamente.</span>
+    <div class="vis-search"><input type="text" id="visBuscar" placeholder="Buscar tabla..."></div>
+    <div class="vis-cols">
+      <div class="vis-panel">
+        <div class="vis-panel-head">
+          <b>Importar / Exportar</b>
+          <span class="micro" id="visCount"></span>
+          <div class="vis-panel-actions">
+            <button class="btn-sm" id="btnVisAll">Todas</button>
+            <button class="btn-sm" id="btnVisNone">Ninguna</button>
+          </div>
+        </div>
+        <div class="modal-list" id="visList"></div>
+      </div>
+      <div class="vis-panel">
+        <div class="vis-panel-head">
+          <b>Trabajadores</b>
+          <span class="micro" id="visTrabCount"></span>
+          <div class="vis-panel-actions">
+            <button class="btn-sm" id="btnVisTrabAll">Todas</button>
+            <button class="btn-sm" id="btnVisTrabNone">Ninguna</button>
+          </div>
+        </div>
+        <div class="modal-list" id="visTrabList"></div>
+      </div>
     </div>
-    <div class="modal-list" id="visList"></div>
     <div class="modal-actions">
       <button class="btn" id="btnVisClose" style="padding:9px 18px">Listo</button>
     </div>
@@ -896,12 +929,19 @@ function openVis() {
 }
 
 function renderVis() {
-  const list = $('visList');
+  const q = String($('visBuscar').value || '').trim().toLowerCase();
   const nVis = state.tablas.filter((t) => t.visible).length;
-  $('visCount').textContent = `${nVis} de ${state.tablas.length} visibles`;
-  list.innerHTML = state.tablas.map((t) => `
+  const nTrab = state.tablas.filter((t) => t.visibleTrab).length;
+  $('visCount').textContent = `${nVis}/${state.tablas.length}`;
+  $('visTrabCount').textContent = `${nTrab}/${state.tablas.length}`;
+  const f = state.tablas.filter((t) => !q || t.tabla.toLowerCase().includes(q));
+  $('visList').innerHTML = f.map((t) => `
     <label><input type="checkbox" data-tabla="${esc(t.tabla)}"${t.visible ? ' checked' : ''}> ${esc(t.tabla)}</label>`).join('');
+  $('visTrabList').innerHTML = f.map((t) => `
+    <label><input type="checkbox" data-trab="${esc(t.tabla)}"${t.visibleTrab ? ' checked' : ''}> ${esc(t.tabla)}</label>`).join('');
 }
+
+$('visBuscar').addEventListener('input', renderVis);
 
 $('visList').addEventListener('change', async (e) => {
   const cb = e.target.closest('input[data-tabla]');
@@ -921,8 +961,21 @@ $('visList').addEventListener('change', async (e) => {
   try { await api('/api/tablas/visibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla, visible }) }); } catch (_) {}
 });
 
+$('visTrabList').addEventListener('change', async (e) => {
+  const cb = e.target.closest('input[data-trab]');
+  if (!cb) return;
+  const tabla = cb.dataset.trab;
+  const visibleTrab = cb.checked;
+  const t = state.tablas.find((x) => x.tabla === tabla);
+  if (t) t.visibleTrab = visibleTrab;
+  renderVis();
+  try { await api('/api/tablas/visibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla, visibleTrab }) }); } catch (_) {}
+});
+
 $('btnVisAll').addEventListener('click', () => setAllVis(true));
 $('btnVisNone').addEventListener('click', () => setAllVis(false));
+$('btnVisTrabAll').addEventListener('click', () => setAllVisTrab(true));
+$('btnVisTrabNone').addEventListener('click', () => setAllVisTrab(false));
 
 async function setAllVis(visible) {
   state.tablas.forEach((t) => { t.visible = visible; });
@@ -933,6 +986,14 @@ async function setAllVis(visible) {
   comboCar.close();
   for (const t of state.tablas) {
     try { await api('/api/tablas/visibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: t.tabla, visible }) }); } catch (_) {}
+  }
+}
+
+async function setAllVisTrab(visible) {
+  state.tablas.forEach((t) => { t.visibleTrab = visible; });
+  renderVis();
+  for (const t of state.tablas) {
+    try { await api('/api/tablas/visibilidad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: t.tabla, visibleTrab: visible }) }); } catch (_) {}
   }
 }
 
@@ -1033,8 +1094,8 @@ $('btnCargar').addEventListener('click', async () => {
           $('progressFill').style.width = '100%';
           $('progressPct').textContent = '100%';
           $('progressFill').classList.add('done');
-          $('progressMsg').textContent = 'Carga completa.';
-          estTerminar();
+$('progressMsg').textContent = 'Carga completa.';
+          estTerminar(d.durMs);
           showResult(d);
         } else if (eventType === 'error') {
           $('progressFill').classList.add('error');
@@ -1056,49 +1117,17 @@ $('btnCargar').addEventListener('click', async () => {
   }
 });
 
-let estTmp = { lastT: 0, ft: 0, total: 0, pct: 0, id: null, el: null };
+let estTmp = { el: null };
 function estIniciar(idEl) {
-  estTmp.lastT = 0;
-  estTmp.ft = 0;
-  estTmp.total = 0;
-  estTmp.pct = 0;
   estTmp.el = $('' + idEl);
-  if (estTmp.el) estTmp.el.textContent = 'Estimando tiempo restante...';
-  clearInterval(estTmp.id);
-  estTmp.id = setInterval(estTick, 1000);
+  if (estTmp.el) estTmp.el.textContent = '';
 }
-function estPct(pct, eta) {
+function estPct(pct, eta) { }
+function estTerminar(durMs) {
   const el = estTmp.el;
   if (!el) return;
-  const p = Math.min(100, Math.max(0, Number(pct) || 0));
-  const now = Date.now();
-  if (p <= 0 || p <= estTmp.pct) { estTmp.pct = Math.max(estTmp.pct, p); return; }
-  estTmp.pct = p;
-  estTmp.lastT = now;
-  if (eta !== undefined && eta !== null && Number(eta) >= 0) {
-    const e = Number(eta) || 0;
-    if (!estTmp.total) estTmp.total = e;
-    const ftNuevo = now + e * 1000;
-    if (!estTmp.ft) estTmp.ft = ftNuevo;
-    else estTmp.ft = Math.min(Math.round(estTmp.ft * 0.7 + ftNuevo * 0.3), ftNuevo + 30000);
-    estTick();
-  }
-}
-function estTick() {
-  const el = estTmp.el;
-  if (!el || estTmp.pct <= 0 || estTmp.pct >= 100 || !estTmp.lastT) return;
-  if (!estTmp.ft) { el.textContent = 'Estimando tiempo restante...'; return; }
-  const restante = (estTmp.ft - Date.now()) / 1000;
-  if (restante < 1) { el.textContent = 'Finalizando...'; return; }
-  const m = Math.floor(restante / 60), s = Math.floor(restante % 60);
-  const totalTxt = estTmp.total ? ' (de ~' + fmtDur(estTmp.total * 1000) + ')' : '';
-  el.textContent = 'Tiempo estimado restante: ' + (m > 0 ? m + ' min ' : '') + s + ' s' + totalTxt;
-}
-function estTerminar() {
-  clearInterval(estTmp.id);
-  estTmp.id = null;
-  if (estTmp.el) estTmp.el.textContent = '';
-  estTmp.el = null;
+  if (durMs != null && durMs >= 0) el.textContent = 'Tiempo total de carga: ' + fmtDur(durMs);
+  else el.textContent = '';
 }
 function showResult(d) {
   const box = $('resultCargar');
@@ -2231,7 +2260,7 @@ async function cargarMes() {
           $('progressPctMes').textContent = '100%';
           $('progressFillMes').classList.add('done');
           $('progressMsgMes').textContent = 'Carga completa.';
-          estTerminar();
+estTerminar(d.durMs);
           showMesResult(d);
         } else if (eventType === 'error') {
           $('progressFillMes').classList.add('error');
