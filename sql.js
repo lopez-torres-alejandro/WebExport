@@ -55,7 +55,12 @@ if (usarTrusted()) {
 }
 
 function getConfig() {
-  if (usarTrusted()) return { connectionString: cadenaOdbc(DRIVERS_ODBC[0]) };
+  if (usarTrusted()) {
+    return {
+      connectionString: cadenaOdbc(DRIVERS_ODBC[0]),
+      requestTimeout: 600000,
+    };
+  }
   return {
     server: process.env.DB_SERVER,
     port: Number(process.env.DB_PORT) || 1433,

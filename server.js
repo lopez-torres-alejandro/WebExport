@@ -634,11 +634,7 @@ async function insertarStaging(pool, schema, table, stagingId, columns, uniqueRo
   const insertarChunk = async (desde, hasta) => {
     for (let i = desde; i < hasta; i += BATCH) {
       const batch = uniqueRows.slice(i, Math.min(i + BATCH, hasta));
-      const tbl = new sql.Table(stagingId);
-      tbl.create = false;
-      columns.forEach((c) => tbl.columns.add(c.COLUMN_NAME, bulkType(c), { nullable: true }));
-      for (const vals of batch) tbl.rows.add(...vals);
-      await pool.request().bulk(tbl);
+      await insertarFilasDirectas(pool.request(), stagingQual, columns, batch, 2000);
     }
   };
   let hecho = 0;
@@ -925,15 +921,83 @@ function enRangoLike(raw, f) {
   return s >= String(f.desde).trim().toLowerCase() && s <= String(f.hasta).trim().toLowerCase();
 }
 
-async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemplazar, send }) {
+function fechaSql(v) {
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,7}))?)?$/);
+  if (m) {
+    const d = `${m[1]}-${m[2]}-${m[3]}`;
+    if (!m[4]) return d;
+    const ms = m[7] ? (m[7] + '000').slice(0, 3) : '000';
+    return `${d}T${m[4]}:${m[5]}:${m[6]}.${ms}`;
+  }
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2}):(\d{2}))?$/);
+  if (m) {
+    const d = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    if (!m[4]) return d;
+    return `${d}T${m[4].padStart(2, '0')}:${m[5]}:${m[6]}.000`;
+  }
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}.000`;
+}
+
+function fmtValSql(v, c) {
+  if (v == null || v === '') return 'NULL';
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const p = (n) => String(n).padStart(2, '0');
+    const f = `${v.getUTCFullYear()}-${p(v.getUTCMonth() + 1)}-${p(v.getUTCDate())}T${p(v.getUTCHours())}:${p(v.getUTCMinutes())}:${p(v.getUTCSeconds())}.000`;
+    return c.DATA_TYPE === 'date' ? `'${f.split('T')[0]}'` : `'${f}'`;
+  }
+  if (esFecha(c.DATA_TYPE)) {
+    const f = fechaSql(v);
+    if (f !== null) return c.DATA_TYPE === 'date' ? `'${f.split('T')[0]}'` : `'${f}'`;
+  }
+  if (NUMERIC_TYPES.test(c.DATA_TYPE)) {
+    const n = typeof v === 'number' ? v : Number(String(v));
+    if (!isNaN(n)) return String(n);
+  }
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+async function insertarFilasDirectas(req, qual, columns, filas, tamChunk) {
+  const chunkSize = Math.min(tamChunk || 400, 1000);
+  const colsQ = columns.map((c) => `[${c.COLUMN_NAME}]`).join(', ');
+  let buf = [];
+  let total = 0;
+  for (const fila of filas) {
+    buf.push(`(${columns.map((c, j) => fmtValSql(fila[j], c)).join(', ')})`);
+    if (buf.length >= chunkSize) {
+      await req.query(`INSERT INTO ${qual} (${colsQ}) VALUES ${buf.join(', ')};`);
+      total += buf.length;
+      buf = [];
+    }
+  }
+  if (buf.length) {
+    await req.query(`INSERT INTO ${qual} (${colsQ}) VALUES ${buf.join(', ')};`);
+    total += buf.length;
+  }
+  return total;
+}
+
+async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemplazar, send, claves = [] }) {
   const buffer = req.file.buffer;
   const originalname = req.file.originalname;
   const ext = originalname.split('.').pop().toLowerCase();
   send('progress', { pct: 8, msg: 'Camino rapido: extrayendo datos del archivo...' });
   const qual = `${imp.br(schema)}.${imp.br(table)}`;
   const pool = await sql.connect(getConfig());
+  const keyCols = [];
+  const keyIdx = [];
+  for (const k of claves) {
+    const ci = columns.findIndex((c) => imp.norm(c.COLUMN_NAME) === imp.norm(k));
+    if (ci === -1) throw new Error(`Columna(s) clave inexistente(s) en la tabla ${schema}.${table}: ${String(k)}`);
+    keyCols.push(columns[ci].COLUMN_NAME);
+    keyIdx.push(ci);
+  }
   let tx = null;
   let txDeleteP = null;
+  let keySet = null;
   let tmpFile = null;
   let containerName = null;
   let eliminadas = 0;
@@ -942,29 +1006,33 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
     tx = new sql.Transaction(pool);
     await tx.begin();
     if (reemplazar) {
-      txDeleteP = (async () => {
-        if (filtros.length) {
-          const cq = new sql.Request(tx);
-          const cwd = filtroWhere(filtros, cq);
-          const cr = await cq.query(`SELECT COUNT(*) AS n, (SELECT COUNT(*) FROM ${qual} WHERE ${cwd}) AS m FROM ${qual};`);
-          const n = cr.recordset[0].n || 0;
-          const m = cr.recordset[0].m || 0;
-          if (n === m) {
-            await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
-            eliminadas = n;
+      if (!filtros.length && keyCols.length) {
+        keySet = new Set();
+      } else {
+        txDeleteP = (async () => {
+          if (filtros.length) {
+            const cq = new sql.Request(tx);
+            const cwd = filtroWhere(filtros, cq);
+            const cr = await cq.query(`SELECT COUNT(*) AS n, (SELECT COUNT(*) FROM ${qual} WHERE ${cwd}) AS m FROM ${qual};`);
+            const n = cr.recordset[0].n || 0;
+            const m = cr.recordset[0].m || 0;
+            if (n === m) {
+              await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
+              eliminadas = n;
+            } else {
+              const dq = new sql.Request(tx);
+              const wd = filtroWhere(filtros, dq);
+              const dr = await dq.query(`DELETE FROM ${qual} WHERE ${wd};`);
+              eliminadas = dr.rowsAffected[0] || 0;
+            }
           } else {
-            const dq = new sql.Request(tx);
-            const wd = filtroWhere(filtros, dq);
-            const dr = await dq.query(`DELETE FROM ${qual} WHERE ${wd};`);
-            eliminadas = dr.rowsAffected[0] || 0;
+            const cr = await new sql.Request(tx).query(`SELECT COUNT(*) AS n FROM ${qual};`);
+            eliminadas = cr.recordset[0].n || 0;
+            await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
           }
-        } else {
-          const cr = await new sql.Request(tx).query(`SELECT COUNT(*) AS n FROM ${qual};`);
-          eliminadas = cr.recordset[0].n || 0;
-          await new sql.Request(tx).query(`TRUNCATE TABLE ${qual};`);
-        }
-      })();
-      txDeleteP.catch(() => {});
+        })();
+        txDeleteP.catch(() => {});
+      }
     }
 
     let buf = buffer;
@@ -1136,6 +1204,10 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
           v = valorJs(columns[j], raw);
           const conv = convCfg && convCfg[columns[j].COLUMN_NAME];
           if (conv) v = conv(v);
+          if (esFecha(columns[j].DATA_TYPE) && typeof v === 'string' && v !== '') {
+            const f = fechaSql(v);
+            if (f !== null) v = columns[j].DATA_TYPE === 'date' ? f.split('T')[0] : f;
+          }
         }
       }
       if (v !== '') allEmpty = false;
@@ -1149,6 +1221,16 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
       }
     }
     if (allEmpty) { sinFiltro++; continue; }
+    if (keySet) {
+      const partesK = [];
+      let okK = true;
+      for (const kj of keyIdx) {
+        const v = row[kj] == null ? '' : String(row[kj]).trim();
+        if (v === '') { okK = false; break; }
+        partesK.push(v);
+      }
+      if (okK) keySet.add(partesK.join('\u0001'));
+    }
     validas++;
     outLines.push(row.join(SEP));
   }
@@ -1174,7 +1256,40 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
   if (!filasValidas) throw new Error('El archivo no tiene filas validas.');
   send('progress', { pct: 16, msg: `Camino rapido: ${filasValidas.toLocaleString()} filas validas.` });
 
-  await txDeleteP;
+  if (keySet && keySet.size) {
+    const c0K = Date.now();
+    const combos = [...keySet];
+    eliminadas = 0;
+    let deletesOk = false;
+    try {
+      const keyColsSql = keyCols.map((kc, i) => `[k${i}] varchar(255) NOT NULL`).join(', ');
+      await new sql.Request(tx).query(`CREATE TABLE #imp_claves (${keyColsSql});`);
+      const kCols = keyCols.map((kc, i) => ({ COLUMN_NAME: `k${i}`, DATA_TYPE: 'varchar', CHARACTER_MAXIMUM_LENGTH: 255 }));
+      const filasK = combos.map((combo) => combo.split('\u0001'));
+      await insertarFilasDirectas(new sql.Request(tx), '#imp_claves', kCols, filasK, 1000);
+      await new sql.Request(tx).query(`CREATE INDEX IX_imp_claves ON #imp_claves (${keyCols.map((_, i) => `[k${i}]`).join(', ')});`);
+      const joinConds = keyCols.map((kc, i) => `t.[${kc}] = s.[k${i}]`).join(' AND ');
+      const dr = await new sql.Request(tx).query(`DELETE t FROM ${qual} AS t INNER JOIN #imp_claves AS s ON ${joinConds};`);
+      eliminadas = dr.rowsAffected[0] || 0;
+      deletesOk = true;
+    } catch (_) {
+      deletesOk = false;
+    }
+    if (!deletesOk) {
+      for (let ci = 0; ci < combos.length; ci += 2000) {
+        const chunk = combos.slice(ci, ci + 2000);
+        const conds = chunk.map((combo) => {
+          const vs = combo.split('\u0001');
+          return `(${vs.map((v, i) => `[${keyCols[i]}] = '${String(v).replace(/'/g, "''")}'`).join(' AND ')})`;
+        }).join(' OR ');
+        const dr = await new sql.Request(tx).query(`DELETE FROM ${qual} WHERE ${conds};`);
+        eliminadas += dr.rowsAffected[0] || 0;
+      }
+    }
+    send('progress', { pct: 18, msg: `Reemplazo por clave: ${eliminadas.toLocaleString()} registros eliminados en ${((Date.now() - c0K) / 1000).toFixed(1)} s.` });
+  } else {
+    if (txDeleteP) await txDeleteP;
+  }
 
   const priorB = histPorFila(tabla + '@rapido') || histPorFilaGlobal('@rapido');
   const priorBS = priorB != null ? (priorB / 1000) * filasValidas : null;
@@ -1196,34 +1311,18 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
       throw new InfraError('BULK INSERT fallo: ' + (e.message || '').slice(0, 300));
     }
   } else {
-    send('progress', { pct: 22, msg: 'Camino rapido sin Docker: insertando con bulk directo...', eta: estB });
-    const tbl = new sql.Table(`${schema}.${table}`);
-    tbl.create = false;
-    columns.forEach((c) => tbl.columns.add(c.COLUMN_NAME, bulkType(c), { nullable: true }));
+    send('progress', { pct: 22, msg: 'Camino rapido sin Docker: insertando por lotes directos...', eta: estB });
+    const filasArr = [];
     for (let L = 1; L < outLines.length; L++) {
       if (!String(outLines[L]).trim()) continue;
       const celdas = outLines[L].split(SEP);
-      const rowVals = columns.map((c, j) => {
-        const v = celdas[j] == null ? '' : String(celdas[j]);
-        if (v === '') return null;
-        if (esFecha(c.DATA_TYPE)) {
-          const d = new Date(v);
-          return isNaN(d.getTime()) ? null : d;
-        }
-        if (NUMERIC_TYPES.test(c.DATA_TYPE)) {
-          const n = Number(v);
-          return isNaN(n) ? v : n;
-        }
-        return v;
-      });
-      tbl.rows.add(...rowVals);
+      filasArr.push(columns.map((c, j) => (celdas[j] == null ? '' : String(celdas[j]))));
     }
     try {
-      await new sql.Request(tx).bulk(tbl);
+      insertados = await insertarFilasDirectas(new sql.Request(tx), qual, columns, filasArr, 400);
     } catch (e) {
       throw new InfraError('La insercion rapida sin Docker fallo: ' + (e.message || '').slice(0, 300));
     }
-    insertados = filasValidas;
   }
   if (!insertados) throw new Error('El archivo no tiene filas validas.');
   await tx.commit();
@@ -1469,6 +1568,12 @@ app.post('/api/cargar-mes', upload.single('archivo'), async (req, res) => {
 
     send('progress', { pct: 25, msg: 'Mapeando datos...' });
     const indexes = columns.map((c) => ({ col: c, idx: headers.indexOf(imp.norm(c.COLUMN_NAME)) }));
+    let claves = [];
+    try {
+      const pk = await getPkCols(pool, schema, table);
+      claves = pk.length ? pk : await getUniqueIdxCols(pool, schema, table);
+    } catch (_) {}
+    if (!claves.length) claves = [columns[0].COLUMN_NAME];
     const keyIdxMap = claves.map((c) => columns.findIndex((col) => imp.norm(col.COLUMN_NAME) === imp.norm(c)));
     const seen = new Map();
     let sinFiltro = 0;
@@ -1629,37 +1734,19 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
   const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
 
   const t0 = Date.now();
-  let pool;
-  let stagingQual = null;
   try {
     const tabla = req.body.tabla;
     if (!req.file) throw new Error('No se recibio ningun archivo.');
     if (!tabla) throw new Error('Selecciona una tabla destino.');
 
-    send('progress', { pct: 5, msg: 'Leyendo archivo...' });
-    const { rows, sheetName } = parseFileBuffer(req.file.buffer, req.file.originalname);
-    const totalFilas = rows.length - 1;
-    if (totalFilas <= 0) throw new Error('El archivo esta vacio.');
-
-    send('progress', { pct: 15, msg: `${totalFilas} filas en '${sheetName}'.` });
     const [schema, table] = imp.splitTable(tabla);
-    pool = await sql.connect(getConfig());
 
-    send('progress', { pct: 20, msg: 'Obteniendo columnas...' });
+    send('progress', { pct: 5, msg: 'Obteniendo columnas...' });
+    const pool = await sql.connect(getConfig());
     const columns = await imp.getTableColumns(pool, schema, table);
-
-    const aliasMap = resolverAlias(rows[0] || [], columns, table);
-    if (aliasMap.size) rows[0] = rows[0].map((h) => aliasMap.get(imp.norm(h)) || h);
-
-    const { faltan, sobran } = imp.compararColumnas(rows, columns);
-    if (faltan.length) {
-      const extra = sobran.length ? ` Ademas, el archivo trae columnas que la tabla no tiene: ${sobran.join(', ')}.` : '';
-      throw new Error(`El archivo no corresponde a la tabla ${schema}.${table}: faltan las columnas ${faltan.join(', ')}.${extra}`);
-    }
 
     const rawClave = req.body.clave || '';
     let claves = [];
-    let advertencia = null;
     if (rawClave) {
       try {
         const p = JSON.parse(rawClave);
@@ -1668,110 +1755,35 @@ app.post('/api/cargar', upload.single('archivo'), async (req, res) => {
         claves = [String(rawClave)];
       }
       claves = claves.map((c) => String(c).trim()).filter(Boolean);
-      const noExisten = claves.filter((c) => !columns.some((col) => imp.norm(col.COLUMN_NAME) === imp.norm(c)));
-      if (noExisten.length) throw new Error(`Columna(s) clave inexistente(s) en la tabla: ${noExisten.join(', ')}`);
-      claves = claves.map((c) => columns.find((col) => imp.norm(col.COLUMN_NAME) === imp.norm(c)).COLUMN_NAME);
-    } else {
-      const pk = await getPkCols(pool, schema, table);
-      if (pk.length) {
-        claves = pk;
-      } else {
-        const ui = await getUniqueIdxCols(pool, schema, table);
-        if (ui.length) {
-          claves = ui;
-        } else {
-          claves = [columns[0].COLUMN_NAME];
-          advertencia = `La tabla ${schema}.${table} no tiene clave primaria ni indice unico definidos. ` +
-            `Usa el analizador (estrella recomendada) para elegir la mejor combinacion de columnas y evitar duplicados.`;
-        }
-      }
-    }
-
-    send('progress', { pct: 25, msg: 'Mapeando datos...' });
-    const proc = imp.processRows(rows, columns, claves);
-    const uniqueRows = proc.uniqueRows;
-    const total = uniqueRows.length;
-
-    const qualified = `${imp.br(schema)}.${imp.br(table)}`;
-    const allCols = columns.map((c) => c.COLUMN_NAME);
-    const setCols = allCols.filter((n) => !claves.some((k) => imp.norm(k) === imp.norm(n)));
-
-    const stagingId = `tmp${Date.now()}`;
-
-    send('progress', { pct: 28, msg: 'Creando tabla staging...' });
-    const resSt = await insertarStaging(pool, schema, table, stagingId, columns, uniqueRows, send, 2, 15, 30, tabla);
-
-    stagingQual = resSt.stagingQual;
-
-    const tgtCols = allCols.map((n) => `[${n}]`).join(', ');
-    const onClause = claves.map((k) => `t.[${k}] = s.[${k}]`).join(' AND ');
-    const updateSet = setCols.map((n) => `t.[${n}] = s.[${n}]`).join(', ');
-    const diffCond = setCols.map((n) => `t.[${n}] IS DISTINCT FROM s.[${n}]`).join(' OR ');
-
-    const countBefore = await pool.request().query(`SELECT COUNT(*) AS c FROM ${qualified};`);
-    const beforeCount = countBefore.recordset[0].c;
-
-    const nB = Math.max(1, Math.ceil(total / 100000));
-    const priorM = histMergePorFila(tabla + '@estandar');
-    const priorMS = priorM != null ? (priorM / 1000) * total : null;
-    let estMerge = priorMS != null ? Math.round(priorMS + 15) : Math.round((resSt.durMs / 1000) * 2 + 15);
-    send('progress', { pct: 52, msg: `MERGE: 0 de ${nB} lotes...`, eta: estMerge });
-
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
-    const tM0 = Date.now();
-    try {
       if (claves.length) {
-        await pool.request().query(`CREATE INDEX IX_tmp_${stagingId} ON ${imp.br(schema)}.${imp.br(stagingId)} (${claves.map((k) => `[${k}]`).join(', ')});`);
+        const noExisten = claves.filter((c) => !columns.some((col) => imp.norm(col.COLUMN_NAME) === imp.norm(c)));
+        if (noExisten.length) throw new Error(`Columna(s) clave inexistente(s) en la tabla: ${noExisten.join(', ')}`);
+        claves = claves.map((c) => columns.find((col) => imp.norm(col.COLUMN_NAME) === imp.norm(c)).COLUMN_NAME);
       }
-      for (let b = 1; b <= nB; b++) {
-        const req = new sql.Request(tx);
-        const mergeSql = `
-          MERGE ${qualified} AS t
-          USING (SELECT ${columns.map((c) => `[${c.COLUMN_NAME}]`).join(', ')} FROM ${imp.br(schema)}.${imp.br(stagingId)} WHERE _rn BETWEEN ${(b - 1) * 100000 + 1} AND ${b * 100000}) AS s
-          ON ${onClause}
-          ${setCols.length ? `WHEN MATCHED AND (${diffCond}) THEN UPDATE SET ${updateSet}` : ''}
-          WHEN NOT MATCHED THEN INSERT (${tgtCols})
-            VALUES (${columns.map((c) => `s.[${c.COLUMN_NAME}]`).join(', ')});`;
-        await req.query(mergeSql);
-        const elM = (Date.now() - tM0) / 1000;
-        const rpsM = elM > 0 ? (b * 100000) / elM : 0;
-        if (rpsM > 0) {
-          const nuevo = ((nB - b) * 100000) / rpsM + 15;
-          estMerge = b === 1 ? Math.round(estMerge * 0.5 + nuevo * 0.5) : Math.round(estMerge * 0.6 + nuevo * 0.4);
-        }
-        send('progress', { pct: Math.round(52 + (b / nB) * 42), msg: `MERGE: ${b} de ${nB} lotes...`, eta: estMerge });
-      }
-      await tx.commit();
-      histRegistrar(tabla + '@estandar', total, resSt.durMs, Date.now() - tM0);
-    } catch (e) {
-      try { await tx.rollback(); } catch (_) {}
-      throw e;
     }
 
-    send('progress', { pct: 95, msg: 'Contando resultados...', eta: 15 });
-    const countAfter = await pool.request().query(`SELECT COUNT(*) AS c FROM ${qualified};`);
-    const afterCount = countAfter.recordset[0].c;
-    const netNew = Math.max(0, afterCount - beforeCount);
-
-    await pool.request().query(`DROP TABLE ${imp.br(schema)}.${imp.br(stagingId)};`);
-    await pool.close(); pool = null;
-
-    send('progress', { pct: 100, msg: 'Carga completa.', eta: 0 });
-    send('done', {
-      archivo: req.file.originalname, tabla, clave: claves.join(' + '),
-      totalFilas, filasValidas: total, duplicadas: proc.duplicadas, omitidas: proc.skipped.length,
-      insertados: netNew, actualizados: total - netNew, errores: 0, advertencia,
-      durMs: Date.now() - t0,
+    const done = await cargarRapido({
+      req, tabla, schema, table, columns,
+      filtros: [],
+      reemplazar: true,
+      claves,
+      send,
     });
+    done.durMs = Date.now() - t0;
+    done.clave = claves.join(' + ');
+    done.filasValidas = done.filasValidas != null ? done.filasValidas : done.insertados;
+    done.actualizados = 0;
+    done.errores = 0;
+    done.duplicadas = 0;
+    done.omitidas = (done.omitidas || 0) + (done.mezclaOmitida || 0);
+    delete done.mezclaOmitida;
+    send('done', done);
     res.end();
   } catch (e) {
     try { fs.appendFileSync(path.join(__dirname, 'err_dump.log'), JSON.stringify({ msg: e && e.message, stack: e && e.stack, name: e && e.name }) + '\n'); } catch (_) {}
-    if (stagingQual) {
-      try { await pool.request().query(`DROP TABLE ${stagingQual};`); } catch (_) {}
-    }
-    if (pool) { try { await pool.close(); } catch (_) {} }
-    send('error', { message: e.message }); res.end();
+    console.error('[cargar] ERROR:', e && e.stack ? e.stack : e);
+    try { send('error', { message: e.message }); } catch (_) {}
+    res.end();
   }
 });
 
