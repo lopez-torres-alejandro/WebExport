@@ -963,20 +963,46 @@ function fmtValSql(v, c) {
 async function insertarFilasDirectas(req, qual, columns, filas, tamChunk) {
   const chunkSize = Math.min(tamChunk || 400, 1000);
   const colsQ = columns.map((c) => `[${c.COLUMN_NAME}]`).join(', ');
+  const withCols = columns.map((c) => {
+    let tip = String(c.DATA_TYPE || 'varchar');
+    const len = c.CHARACTER_MAXIMUM_LENGTH;
+    if (len != null && /^(var|nvar)?char$/i.test(tip)) tip = `${tip}(${len === -1 ? 'max' : len})`;
+    return `[${c.COLUMN_NAME}] ${tip} '$.${c.COLUMN_NAME}'`;
+  }).join(', ');
+  const valorJson = (v, c) => {
+    if (v == null || v === '') return null;
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      const p = (n) => String(n).padStart(2, '0');
+      const f = `${v.getUTCFullYear()}-${p(v.getUTCMonth() + 1)}-${p(v.getUTCDate())}T${p(v.getUTCHours())}:${p(v.getUTCMinutes())}:${p(v.getUTCSeconds())}.000`;
+      return c.DATA_TYPE === 'date' ? f.split('T')[0] : f;
+    }
+    if (esFecha(c.DATA_TYPE)) {
+      const f = fechaSql(v);
+      return f !== null ? f : null;
+    }
+    if (NUMERIC_TYPES.test(c.DATA_TYPE)) {
+      const n = typeof v === 'number' ? v : Number(String(v));
+      if (!isNaN(n)) return n;
+    }
+    return String(v);
+  };
   let buf = [];
   let total = 0;
+  const run = async () => {
+    const json = JSON.stringify(buf);
+    if (!req.parameters.imp_json) req.input('imp_json', sql.NVarChar(sql.MAX), json);
+    else req.parameters.imp_json.value = json;
+    const r = await req.query(`INSERT INTO ${qual} (${colsQ}) SELECT ${colsQ} FROM OPENJSON(@imp_json) WITH (${withCols});`);
+    total += r.rowsAffected[0] || 0;
+    buf = [];
+  };
   for (const fila of filas) {
-    buf.push(`(${columns.map((c, j) => fmtValSql(fila[j], c)).join(', ')})`);
-    if (buf.length >= chunkSize) {
-      await req.query(`INSERT INTO ${qual} (${colsQ}) VALUES ${buf.join(', ')};`);
-      total += buf.length;
-      buf = [];
-    }
+    const o = {};
+    for (let j = 0; j < columns.length; j++) o[columns[j].COLUMN_NAME] = valorJson(fila[j], columns[j]);
+    buf.push(o);
+    if (buf.length >= chunkSize) await run();
   }
-  if (buf.length) {
-    await req.query(`INSERT INTO ${qual} (${colsQ}) VALUES ${buf.join(', ')};`);
-    total += buf.length;
-  }
+  if (buf.length) await run();
   return total;
 }
 
@@ -1319,7 +1345,7 @@ async function cargarRapido({ req, tabla, schema, table, columns, filtros, reemp
       filasArr.push(columns.map((c, j) => (celdas[j] == null ? '' : String(celdas[j]))));
     }
     try {
-      insertados = await insertarFilasDirectas(new sql.Request(tx), qual, columns, filasArr, 400);
+      insertados = await insertarFilasDirectas(new sql.Request(tx), qual, columns, filasArr, 1000);
     } catch (e) {
       throw new InfraError('La insercion rapida sin Docker fallo: ' + (e.message || '').slice(0, 300));
     }
